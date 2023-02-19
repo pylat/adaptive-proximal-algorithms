@@ -110,7 +110,7 @@ function run_logreg_l1_data(
         zeros(n),
         f = Counting(f),
         g = g,
-        rule = MalitskyMischenkoRule(gamma = 1.0),
+        rule = MalitskyMishchenkoRule(gamma = 1.0),
         tol = tol,
         maxit = maxit,
         record_fn = record_pg,

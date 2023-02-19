@@ -128,7 +128,7 @@ function run_random_lasso(;
         zeros(n),
         f = Counting(f),
         g = g,
-        rule = MalitskyMischenkoRule(gamma = gam_init),
+        rule = MalitskyMishchenkoRule(gamma = gam_init),
         tol = tol,
         maxit = maxit,
         record_fn = record_pg,

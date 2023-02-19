@@ -218,16 +218,16 @@ function stepsize(rule::FixedStepsize, args...)
     return (rule.gamma, rule.gamma * rule.t^2), nothing
 end
 
-Base.@kwdef struct MalitskyMischenkoRule{R}
+Base.@kwdef struct MalitskyMishchenkoRule{R}
     gamma::R
     t::R = one(gamma)
 end
 
-function stepsize(rule::MalitskyMischenkoRule{R}) where {R}
+function stepsize(rule::MalitskyMishchenkoRule{R}) where {R}
     return (rule.gamma, rule.gamma * rule.t^2), (rule.gamma, R(Inf))
 end
 
-function stepsize(rule::MalitskyMischenkoRule, (gamma_prev, rho), x1, grad_x1, x0, grad_x0)
+function stepsize(rule::MalitskyMishchenkoRule, (gamma_prev, rho), x1, grad_x1, x0, grad_x0)
     L = norm(grad_x1 - grad_x0) / norm(x1 - x0)
     gamma = min(sqrt(1 + rho) * gamma_prev, 1 / (2 * L))
     return (gamma, gamma * rule.t^2), (gamma, gamma / gamma_prev)

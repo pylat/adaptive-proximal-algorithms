@@ -112,7 +112,7 @@ function run_cubic_logreg_data(
         zeros(n),
         f = Counting(f),
         g = g,
-        rule = MalitskyMischenkoRule(gamma = 0.001),
+        rule = MalitskyMishchenkoRule(gamma = 0.001),
         tol = tol,
         maxit = maxit,
         record_fn = record_pg,

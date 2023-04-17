@@ -19,7 +19,7 @@ upper_bound(x, f_x, grad_x, z, gamma) = f_x + real(dot(grad_x, z - x)) + 1 / (2 
 function backtrack_stepsize(gamma, f, g, x, f_x, grad_x)
     z, _ = prox(g, x - gamma * grad_x, gamma)
     ub_z = upper_bound(x, f_x, grad_x, z, gamma)
-    grad_z, f_z = gradient(f, z)
+    f_z = f(z)
     while f_z > ub_z
         gamma /= 2
         if gamma < 1e-12
@@ -27,8 +27,9 @@ function backtrack_stepsize(gamma, f, g, x, f_x, grad_x)
         end
         z, _ = prox(g, x - gamma * grad_x, gamma)
         ub_z = upper_bound(x, f_x, grad_x, z, gamma)
-        grad_z, f_z = gradient(f, z)
+        f_z = f(z)
     end
+    grad_z, ~ = gradient(f, z)
     return gamma, z, f_z, grad_z
 end
 

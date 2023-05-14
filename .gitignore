@@ -1,4 +1,8 @@
 .DS_store
 
 Manifest.toml
+
+!experiments/Manifest.toml
 experiments/datasets
+experiments/*/*.txt
+experiments/*/*.pdf

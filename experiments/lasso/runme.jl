@@ -6,6 +6,7 @@ using LinearAlgebra
 using DelimitedFiles
 using Plots
 using LaTeXStrings
+using ProximalCore
 using ProximalOperators: NormL1
 using AdaProx
 
@@ -18,10 +19,10 @@ end
 
 (f::LinearLeastSquares)(w) = 0.5 * norm(f.A * w - f.b)^2
 
-function gradient(f::LinearLeastSquares, w)
+function ProximalCore.gradient!(grad, f::LinearLeastSquares, w)
     res = f.A * w - f.b
-    g = f.A' * res
-    return g, 0.5 * norm(res)^2
+    grad .= f.A' * res
+    return 0.5 * norm(res)^2
 end
 
 function run_random_lasso(;
@@ -127,7 +128,7 @@ function run_random_lasso(;
         zeros(n),
         f = Counting(f),
         g = g,
-        rule = MalitskyMishchenkoRule(gamma = gam_init),
+        rule = AdaProx.MalitskyMishchenkoRule(gamma = gam_init),
         tol = tol,
         maxit = maxit,
         record_fn = record_pg,
@@ -140,7 +141,7 @@ function run_random_lasso(;
         zeros(n),
         f = Counting(f),
         g = g,
-        rule = OurRule(gamma = gam_init),
+        rule = AdaProx.OurRule(gamma = gam_init),
         tol = tol,
         maxit = maxit,
         record_fn = record_pg,
@@ -150,7 +151,7 @@ function run_random_lasso(;
     @info "     objective: $(f(sol) + g(sol))"
 
     @info "Running aGRAAL"
-    sol, numit, record_agraal = AdaProxagraal(
+    sol, numit, record_agraal = AdaProx.agraal(
         zeros(n),
         f = Counting(f),
         g = g,

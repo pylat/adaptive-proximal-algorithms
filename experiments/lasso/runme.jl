@@ -1,6 +1,5 @@
 include(joinpath(@__DIR__, "..", "counting.jl"))
 include(joinpath(@__DIR__, "..", "recording.jl"))
-include(joinpath(@__DIR__, "..", "adaptive_proximal_algorithms.jl"))
 
 using Random
 using LinearAlgebra
@@ -8,6 +7,7 @@ using DelimitedFiles
 using Plots
 using LaTeXStrings
 using ProximalOperators: NormL1
+using AdaProx
 
 pgfplotsx()
 
@@ -84,7 +84,7 @@ function run_random_lasso(;
 
     @info "Running solvers"
 
-    sol, numit, record_fixed = fixed_proxgrad(
+    sol, numit, record_fixed = AdaProx.fixed_proxgrad(
         zeros(n),
         f = Counting(f),
         g = g,
@@ -97,7 +97,7 @@ function run_random_lasso(;
     @info "    iterations: $(numit)"
     @info "     objective: $(f(sol) + g(sol))"
 
-    sol, numit, record_backtracking = backtracking_proxgrad(
+    sol, numit, record_backtracking = AdaProx.backtracking_proxgrad(
         zeros(n),
         f = Counting(f),
         g = g,
@@ -110,7 +110,7 @@ function run_random_lasso(;
     @info "    iterations: $(numit)"
     @info "     objective: $(f(sol) + g(sol))"
 
-    sol, numit, record_backtracking_nesterov = backtracking_nesterov(
+    sol, numit, record_backtracking_nesterov = AdaProx.backtracking_nesterov(
         zeros(n),
         f = Counting(f),
         g = g,
@@ -123,7 +123,7 @@ function run_random_lasso(;
     @info "    iterations: $(numit)"
     @info "     objective: $(f(sol) + g(sol))"
 
-    sol, numit, record_mm = adaptive_proxgrad(
+    sol, numit, record_mm = AdaProx.adaptive_proxgrad(
         zeros(n),
         f = Counting(f),
         g = g,
@@ -136,7 +136,7 @@ function run_random_lasso(;
     @info "    iterations: $(numit)"
     @info "     objective: $(f(sol) + g(sol))"
 
-    sol, numit, record_our = adaptive_proxgrad(
+    sol, numit, record_our = AdaProx.adaptive_proxgrad(
         zeros(n),
         f = Counting(f),
         g = g,
@@ -150,7 +150,7 @@ function run_random_lasso(;
     @info "     objective: $(f(sol) + g(sol))"
 
     @info "Running aGRAAL"
-    sol, numit, record_agraal = agraal(
+    sol, numit, record_agraal = AdaProxagraal(
         zeros(n),
         f = Counting(f),
         g = g,

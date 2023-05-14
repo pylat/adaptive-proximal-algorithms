@@ -1,0 +1,5 @@
+[deps]
+LaTeXStrings = "b964fa9f-0449-5b57-a5c2-d3ea65f4040f"
+PGFPlotsX = "8314cec4-20b6-5062-9cdb-752b83310925"
+ProximalCore = "dc4f5ac2-75d1-4f31-931e-60435d74994b"
+Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"

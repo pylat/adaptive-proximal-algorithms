@@ -1,6 +1,5 @@
 include(joinpath(@__DIR__, "..", "counting.jl"))
 include(joinpath(@__DIR__, "..", "recording.jl"))
-include(joinpath(@__DIR__, "..", "adaptive_proximal_algorithms.jl"))
 include(joinpath(@__DIR__, "..", "libsvm.jl"))
 
 using Random
@@ -9,7 +8,9 @@ using Statistics
 using DelimitedFiles
 using Plots
 using LaTeXStrings
+using ProximalCore
 using ProximalOperators: NormL1
+using AdaProx
 
 pgfplotsx()
 
@@ -25,12 +26,12 @@ function (f::LogisticLoss)(w)
     return -mean(f.y .* log.(probs) + (1 .- f.y) .* log.(1 .- probs))
 end
 
-function gradient(f::LogisticLoss, w)
+function ProximalCore.gradient!(grad, f::LogisticLoss, w)
     probs = sigm.(f.X * w[1:end-1] .+ w[end])
     N = size(f.y, 1)
-    g = f.X' * (probs - f.y) ./ N
-    push!(g, mean(probs - f.y))  # for bias: X_new = [X, 1] 
-    return g, f(w)
+    grad[1:end-1] .= f.X' * (probs - f.y) ./ N
+    grad[end] = mean(probs - f.y)
+    return f(w)
 end
 
 function run_logreg_l1_data(
@@ -55,11 +56,11 @@ function run_logreg_l1_data(
 
     @info "Getting accurate solution"
 
-    sol, numit, _ = adaptive_proxgrad(
+    sol, numit, _ = AdaProx.adaptive_proxgrad(
         zeros(n),
         f = f,
         g = g,
-        rule = OurRule(gamma = 1.0),
+        rule = AdaProx.OurRule(gamma = 1.0),
         tol = tol / 10,
         maxit = maxit * 10,
     )
@@ -67,7 +68,7 @@ function run_logreg_l1_data(
 
     @info "Running solvers"
 
-    sol, numit, record_fixed = fixed_proxgrad(
+    sol, numit, record_fixed = AdaProx.fixed_proxgrad(
         zeros(n),
         f = Counting(f),
         g = g,
@@ -80,7 +81,7 @@ function run_logreg_l1_data(
     @info "    iterations: $(numit)"
     @info "     objective: $(f(sol) + g(sol))"
 
-    sol, numit, record_backtracking = backtracking_proxgrad(
+    sol, numit, record_backtracking = AdaProx.backtracking_proxgrad(
         zeros(n),
         f = Counting(f),
         g = g,
@@ -93,7 +94,7 @@ function run_logreg_l1_data(
     @info "    iterations: $(numit)"
     @info "     objective: $(f(sol) + g(sol))"
 
-    sol, numit, record_backtracking_nesterov = backtracking_nesterov(
+    sol, numit, record_backtracking_nesterov = AdaProx.backtracking_nesterov(
         zeros(n),
         f = Counting(f),
         g = g,
@@ -106,11 +107,11 @@ function run_logreg_l1_data(
     @info "    iterations: $(numit)"
     @info "     objective: $(f(sol) + g(sol))"
 
-    sol, numit, record_mm = adaptive_proxgrad(
+    sol, numit, record_mm = AdaProx.adaptive_proxgrad(
         zeros(n),
         f = Counting(f),
         g = g,
-        rule = MalitskyMishchenkoRule(gamma = 1.0),
+        rule = AdaProx.MalitskyMishchenkoRule(gamma = 1.0),
         tol = tol,
         maxit = maxit,
         record_fn = record_pg,
@@ -119,11 +120,11 @@ function run_logreg_l1_data(
     @info "    iterations: $(numit)"
     @info "     objective: $(f(sol) + g(sol))"
 
-    sol, numit, record_our = adaptive_proxgrad(
+    sol, numit, record_our = AdaProx.adaptive_proxgrad(
         zeros(n),
         f = Counting(f),
         g = g,
-        rule = OurRule(gamma = 1.0),
+        rule = AdaProx.OurRule(gamma = 1.0),
         tol = tol,
         maxit = maxit,
         record_fn = record_pg,
@@ -133,7 +134,7 @@ function run_logreg_l1_data(
     @info "     objective: $(f(sol) + g(sol))"
 
     @info "Running aGRAAL"
-    sol, numit, record_agraal = agraal(
+    sol, numit, record_agraal = AdaProx.agraal(
         zeros(n),
         f = Counting(f),
         g = g,

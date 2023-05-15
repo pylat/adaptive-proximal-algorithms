@@ -1,7 +1,6 @@
 include(joinpath(@__DIR__, "..", "autodiff.jl"))
 include(joinpath(@__DIR__, "..", "counting.jl"))
 include(joinpath(@__DIR__, "..", "recording.jl"))
-include(joinpath(@__DIR__, "..", "adaptive_proximal_algorithms.jl"))
 include(joinpath(@__DIR__, "..", "libsvm.jl"))
 
 using Random
@@ -10,7 +9,9 @@ using Statistics
 using DelimitedFiles
 using Plots
 using LaTeXStrings
+using ProximalCore
 using ProximalOperators: NormL1
+using AdaProx
 
 pgfplotsx()
 
@@ -25,9 +26,9 @@ end
 
 (f::Cubic)(x) = dot(x, f.Q * x) / 2 + dot(x, f.q) + norm(x)^3 * f.c / 6
 
-function gradient(f::Cubic, x)
-    g = f.Q * x + f.q + (f.c * norm(x) / 2) * x
-    return g, (dot(f.q, g) + dot(f.q, x)) / 2 + norm(x)^3 * f.c / 6
+function ProximalCore.gradient!(grad, f::Cubic, x)
+    grad .= f.Q * x + f.q + (f.c * norm(x) / 2) * x
+    return (dot(f.q, grad) + dot(f.q, x)) / 2 + norm(x)^3 * f.c / 6
 end
 
 
@@ -66,15 +67,15 @@ function run_cubic_logreg_data(
     Q, q = logistic_loss_grad_Hessian(X, y, x0)
     f = Cubic(Q, q, lam)
     f = ZygoteFunction(f)
-    g = Zero()
+    g = ProximalCore.Zero()
 
     @info "Getting accurate solution"
 
-    sol, numit, _ = adaptive_proxgrad(
+    sol, numit, _ = AdaProx.adaptive_proxgrad(
         zeros(n),
         f = f,
         g = g,
-        rule = OurRule(gamma = 1.0),
+        rule = AdaProx.OurRule(gamma = 1.0),
         tol = tol / 10,
         maxit = maxit * 10,
     )
@@ -82,7 +83,7 @@ function run_cubic_logreg_data(
 
     @info "Running solvers"
 
-    sol, numit, record_backtracking = backtracking_proxgrad(
+    sol, numit, record_backtracking = AdaProx.backtracking_proxgrad(
         zeros(n),
         f = Counting(f),
         g = g,
@@ -95,7 +96,7 @@ function run_cubic_logreg_data(
     @info "    iterations: $(numit)"
     @info "     objective: $(f(sol) + g(sol))"
 
-    sol, numit, record_backtracking_nesterov = backtracking_nesterov(
+    sol, numit, record_backtracking_nesterov = AdaProx.backtracking_nesterov(
         zeros(n),
         f = Counting(f),
         g = g,
@@ -108,11 +109,11 @@ function run_cubic_logreg_data(
     @info "    iterations: $(numit)"
     @info "     objective: $(f(sol) + g(sol))"
 
-    sol, numit, record_mm = adaptive_proxgrad(
+    sol, numit, record_mm = AdaProx.adaptive_proxgrad(
         zeros(n),
         f = Counting(f),
         g = g,
-        rule = MalitskyMishchenkoRule(gamma = 0.001),
+        rule = AdaProx.MalitskyMishchenkoRule(gamma = 0.001),
         tol = tol,
         maxit = maxit,
         record_fn = record_pg,
@@ -121,11 +122,11 @@ function run_cubic_logreg_data(
     @info "    iterations: $(numit)"
     @info "     objective: $(f(sol) + g(sol))"
 
-    sol, numit, record_our = adaptive_proxgrad(
+    sol, numit, record_our = AdaProx.adaptive_proxgrad(
         zeros(n),
         f = Counting(f),
         g = g,
-        rule = OurRule(gamma = 1.0),
+        rule = AdaProx.OurRule(gamma = 1.0),
         tol = tol,
         maxit = maxit,
         record_fn = record_pg,
@@ -135,7 +136,7 @@ function run_cubic_logreg_data(
     @info "     objective: $(f(sol) + g(sol))"
 
     @info "Running aGRAAL"
-    sol, numit, record_agraal = agraal(
+    sol, numit, record_agraal = AdaProx.agraal(
         zeros(n),
         f = Counting(f),
         g = g,

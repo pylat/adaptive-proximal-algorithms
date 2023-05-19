@@ -44,8 +44,7 @@ function run_random_lasso(;
 
     p = n / pfactor # nonzeros
     rho = 1 # some positive number controlling how large solution is
-    lam = 1  # check if we can change this without zeroing the solution---------<<<<<
-
+    lam = 1  
     y_star = rand(m)
     y_star ./= norm(y_star) #y^\star
     C = rand(m, n) .* 2 .- 1

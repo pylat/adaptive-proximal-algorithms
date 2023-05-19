@@ -22,11 +22,7 @@ record_pg(x, f, g, gamma, norm_res) = Dict(
 )
 
 record_pd(x, y, f, g, h, A, gamma, sigma, norm_res) = Dict(
-    :objective => (
-        nocount(f)(x) +
-        nocount(g)(x) +
-        nocount(h)(nocount(A) * x)
-    ),
+    :objective => obj(f,g, h, A, x), 
     :grad_f_evals => record_grad_count(f),
     :prox_g_evals => record_prox_count(g),
     :prox_h_evals => record_prox_count(h),
@@ -36,6 +32,18 @@ record_pd(x, y, f, g, h, A, gamma, sigma, norm_res) = Dict(
     :sigma => sigma,
     :norm_res => norm_res,
 )
+
+function obj(f, g, h, A, x) 
+    y = try 
+        nocount(f)(x) +
+        nocount(g)(x) + 
+        nocount(h)(nocount(A) * x)
+    catch e 
+        nocount(f)(x)
+    end 
+    return y
+end
+
 
 concat_dicts(dicts) = Dict(k => [d[k] for d in dicts] for k in keys(dicts[1]))
 

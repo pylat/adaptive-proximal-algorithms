@@ -26,4 +26,24 @@ if abspath(PROGRAM_FILE) == @__FILE__
         "https://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/binary/phishing",
         target_path,
     )
+    download_maybe(
+        "https://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/binary/heart_scale",
+        target_path,
+    )
+    download_maybe(
+        "https://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/binary/svmguide3",
+        target_path,
+    )
+    download_maybe(
+        "https://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/regression/abalone",
+        target_path,
+    )
+    download_maybe(
+        "https://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/regression/cpusmall_scale",
+        target_path,
+    )
+    download_maybe(
+        "https://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/regression/housing_scale",
+        target_path,
+    )
 end

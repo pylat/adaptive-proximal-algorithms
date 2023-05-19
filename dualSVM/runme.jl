@@ -15,7 +15,7 @@ using Plots
 using LaTeXStrings
 
 using DelimitedFiles
-using ProximalOperators: IndBox, IndZero
+using ProximalOperators: IndBox, IndZero 
 
 struct Quadratic{TQ,Tq}
     Q::TQ
@@ -62,11 +62,11 @@ function run_dsvm(
     # A = Counting(A)
 
     Lf = norm(Q)
-    x0 = zeros(N, 1)
-    y0 = zeros(1, 1)
+     x0 = zeros(N,1)
+    y0 = zeros(1,1)
     norm_A = norm(A)
 
-
+    
     println("t is $t")
 
     @info "Running solvers"
@@ -89,23 +89,23 @@ function run_dsvm(
     )
 
 
-    solx, soly, num_it, record_ourpiu = adaptive_linesearch_primal_dual(
-        x0,
-        y0;
-        f = Counting(f),
-        g = g,
-        h = h,
-        A = A,
-        eta = 1.0 * norm_A,
-        # c = 1.01, 
-        t = t,
-        maxit = maxit,
-        tol = tol,
-        record_fn = record_pd,
-    )
-    println(
-        "Adaptive PD+: $num_it iterations, $(f(solx) + g(solx)) cost, feasibility $(A * solx)",
-    )
+    # solx, soly, num_it, record_ourpiu = adaptive_linesearch_primal_dual(
+    #     x0,
+    #     y0;
+    #     f = Counting(f),
+    #     g = g,
+    #     h = h,
+    #     A = A,
+    #     eta = 1. * norm_A,
+    #     # c = 1.01, 
+    #     t = t,
+    #     maxit = maxit,
+    #     tol = tol,
+    #     record_fn = record_pd,
+    # )
+    # println(
+    #     "Adaptive PD+: $num_it iterations, $(f(solx) + g(solx)) cost, feasibility $(A * solx)",
+    # )
 
     solx, soly, num_it, record_MP = malitsky_pock(
         x0,
@@ -143,24 +143,25 @@ function run_dsvm(
 
     @info "Collecting plot data"
 
-    to_plot = Dict(
-        "Vu-Condat" => concat_dicts(record_Vu),
-        "APDHG" => concat_dicts(record_our),
-        "MP" => concat_dicts(record_MP),
-        "APDHG+" => concat_dicts(record_ourpiu),
-    )
+    to_plot =
+        Dict(
+            "Vu-Condat" => concat_dicts(record_Vu), 
+            "APDHG" => concat_dicts(record_our),
+            "MP" => concat_dicts(record_MP),
+            # "APDHG+" => concat_dicts(record_ourpiu),
+            )
 
     @info "Exporting plot data"
 
     save_labels = Dict(
-        "Vu-Condat" => "Vu-Condat",
-        "APDHG" => "APDHG",
-        "MP" => "MP",
-        "APDHG+" => "AdaPD+",
-    )
-    p = Int(floor(t * 1000)) # potential identifier for later!
+        "Vu-Condat" => "Vu-Condat", 
+        "APDHG"     => "APDHG",
+        "MP"        => "MP",
+        # "APDHG+" => "AdaPD+",
+        )
+    p = Int(floor(t*1000)) # potential identifier for later!
     lam = C
-
+    
     for k in keys(to_plot)
         d = length(to_plot[k][:grad_f_evals])
         rr = Int(ceil(d / 100)) # keeping at most 50 data points
@@ -177,30 +178,12 @@ end
 
 
 
-function main(; maxit = 1000)
-    for t in [1], C in [0.1, 1]
-        run_dsvm(
-            joinpath(@__DIR__, "../", "datasets", "svmguide3"),
-            maxit = maxit,
-            tol = 1e-5,
-            C = C,
-            t = t,
-        )
-        run_dsvm(
-            joinpath(@__DIR__, "../", "datasets", "mushrooms"),
-            maxit = maxit,
-            tol = 1e-5,
-            C = C,
-            t = t,
-        )
-        run_dsvm(
-            joinpath(@__DIR__, "../", "datasets", "heart_scale"),
-            maxit = maxit,
-            tol = 1e-5,
-            C = C,
-            t = t,
-        )
-    end
+function main(;maxit = 1000)
+    for t in [1], C  in [0.1, 1]
+        run_dsvm(joinpath(@__DIR__, "../", "datasets", "svmguide3"), maxit = maxit, tol = 1e-5, C = C, t= t)
+        run_dsvm(joinpath(@__DIR__, "../", "datasets", "mushrooms"), maxit = maxit, tol = 1e-5, C = C, t = t)
+        run_dsvm(joinpath(@__DIR__, "../", "datasets", "heart_scale"), maxit = maxit, tol = 1e-5, C = C, t = t)
+    end 
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__

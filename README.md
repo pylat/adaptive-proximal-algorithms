@@ -2,7 +2,7 @@
 
 This repository contains Julia code for the paper
 
-> Latafat, Stella, Themelis, Patrinos, *Adaptive proximal algorithms for convex optimization under local Lipschitz continuity of the gradient*, [arXiv:2301.04431](https://arxiv.org/abs/2301.04431) (2023).
+> Latafat, Themelis, Stella, Patrinos, *Adaptive proximal algorithms for convex optimization under local Lipschitz continuity of the gradient*, [arXiv:2301.04431](https://arxiv.org/abs/2301.04431) (2023).
 
 Algorithms are implemented [here](./src/AdaProx.jl).
 

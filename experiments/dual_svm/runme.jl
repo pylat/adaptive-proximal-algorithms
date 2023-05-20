@@ -1,13 +1,12 @@
 include(joinpath(@__DIR__, "..", "autodiff.jl"))
 include(joinpath(@__DIR__, "..", "counting.jl"))
 include(joinpath(@__DIR__, "..", "recording.jl"))
-include(joinpath(@__DIR__, "..", "adaptive_proximal_algorithms.jl"))
 include(joinpath(@__DIR__, "..", "libsvm.jl"))
 
 
 using LinearAlgebra
 using SparseArrays
-using ProximalAlgorithms: AFBA, VuCondat
+using AdaProx
 
 using Random
 
@@ -15,7 +14,10 @@ using Plots
 using LaTeXStrings
 
 using DelimitedFiles
-using ProximalOperators: IndBox, IndZero 
+using ProximalCore
+using ProximalOperators: IndBox, IndZero
+
+pgfplotsx()
 
 struct Quadratic{TQ,Tq}
     Q::TQ
@@ -28,9 +30,10 @@ function (f::Quadratic)(x)
     return 0.5 * dot(x, temp) + dot(x, f.q)
 end
 
-function gradient(f::Quadratic, x)
+function ProximalCore.gradient!(grad, f::Quadratic, x)
     temp = f.Q * x
-    return temp + f.q, 0.5 * dot(x, temp) + dot(x, f.q)
+    grad .= temp + f.q
+    return 0.5 * dot(x, temp) + dot(x, f.q)
 end
 
 
@@ -72,14 +75,14 @@ function run_dsvm(
     @info "Running solvers"
 
 
-    solx, soly, num_it, record_our = adaptive_primal_dual(
+    solx, soly, num_it, record_our = AdaProx.adaptive_primal_dual(
         x0,
         y0;
         f = Counting(f),
         g = g,
         h = h,
         A = A,
-        rule = OurRule(t = t, norm_A = norm(A)),
+        rule = AdaProx.OurRule(t = t, norm_A = norm(A)),
         maxit = maxit,
         tol = tol,
         record_fn = record_pd,
@@ -107,7 +110,7 @@ function run_dsvm(
     #     "Adaptive PD+: $num_it iterations, $(f(solx) + g(solx)) cost, feasibility $(A * solx)",
     # )
 
-    solx, soly, num_it, record_MP = malitsky_pock(
+    solx, soly, num_it, record_MP = AdaProx.malitsky_pock(
         x0,
         y0;
         f = Counting(f),
@@ -125,7 +128,7 @@ function run_dsvm(
     )
 
 
-    solx, soly, num_it, record_Vu = vu_condat(
+    solx, soly, num_it, record_Vu = AdaProx.vu_condat(
         x0,
         y0;
         f = Counting(f),

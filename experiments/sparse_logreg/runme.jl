@@ -1,7 +1,5 @@
-include(joinpath(@__DIR__, "..", "autodiff.jl"))
 include(joinpath(@__DIR__, "..", "counting.jl"))
 include(joinpath(@__DIR__, "..", "recording.jl"))
-include(joinpath(@__DIR__, "..", "adaptive_proximal_algorithms.jl"))
 include(joinpath(@__DIR__, "..", "libsvm.jl"))
 
 using Random
@@ -10,71 +8,59 @@ using Statistics
 using DelimitedFiles
 using Plots
 using LaTeXStrings
+using ProximalCore
 using ProximalOperators: NormL1
+using AdaProx
 
 pgfplotsx()
 
-
 sigm(z) = 1 / (1 + exp(-z))
 
-struct Cubic{TQ,Tq,R}
-    Q::TQ
-    q::Tq
-    c::R
+struct LogisticLoss{TX,Ty}
+    X::TX
+    y::Ty
 end
 
-(f::Cubic)(x) = dot(x, f.Q * x) / 2 + dot(x, f.q) + norm(x)^3 * f.c / 6
-
-function gradient(f::Cubic, x)
-    g = f.Q * x + f.q + (f.c * norm(x) / 2) * x
-    return g, (dot(f.q, g) + dot(f.q, x)) / 2 + norm(x)^3 * f.c / 6
+function (f::LogisticLoss)(w)
+    probs = sigm.(f.X * w[1:end-1] .+ w[end])
+    return -mean(f.y .* log.(probs) + (1 .- f.y) .* log.(1 .- probs))
 end
 
-
-function logistic_loss_grad_Hessian(X, y, w)
-    probs = sigm.(X * w[1:end-1] .+ w[end])
-    N = size(y, 1)
-    g = X' * (probs - y) ./ N
-    push!(g, mean(probs - y))  # for bias: X_new = [X, 1] 
-    sb = probs .* (1 .- probs) ./ N
-    R = diagm(0 => sb)
-    XR = X' * R * ones(N, 1)
-    # Hessian: H = [X'*R*X XR;XR' sum(sb)]
-    H = vcat(hcat(X' * R * X, XR), hcat(XR', sum(sb)))
-    return H, g
+function ProximalCore.gradient!(grad, f::LogisticLoss, w)
+    probs = sigm.(f.X * w[1:end-1] .+ w[end])
+    N = size(f.y, 1)
+    grad[1:end-1] .= f.X' * (probs - f.y) ./ N
+    grad[end] = mean(probs - f.y)
+    return f(w)
 end
 
-function run_cubic_logreg_data(
+function run_logreg_l1_data(
     filename,
     ::Type{T} = Float64;
-    seed = 0,
+    lam,
     tol = 1e-5,
     maxit = 1000,
-    lam = 1.0,
 ) where {T}
-    @info "Start cubic subproblem for L1 Logistic Regression ($filename)"
-
-    Random.seed!(seed)
+    @info "Start L1 Logistic Regression ($filename)"
 
     X, y = load_libsvm_dataset(filename, T, labels = [0.0, 1.0])
 
     m, n = size(X)
     n = n + 1
 
-    x0 = zeros(n, 1)
+    f = LogisticLoss(X, y)
+    g = NormL1(T(lam))
 
-    Q, q = logistic_loss_grad_Hessian(X, y, x0)
-    f = Cubic(Q, q, lam)
-    f = ZygoteFunction(f)
-    g = Zero()
+    Lf = norm(X * X') / 4 # doesn't take the column of 1s into account!
+    gam_init = 1 / Lf
 
     @info "Getting accurate solution"
 
-    sol, numit, _ = adaptive_proxgrad(
+    sol, numit, _ = AdaProx.adaptive_proxgrad(
         zeros(n),
         f = f,
         g = g,
-        rule = OurRule(gamma = 1.0),
+        rule = AdaProx.OurRule(gamma = 1.0),
         tol = tol / 10,
         maxit = maxit * 10,
     )
@@ -82,37 +68,50 @@ function run_cubic_logreg_data(
 
     @info "Running solvers"
 
-    sol, numit, record_backtracking = backtracking_proxgrad(
+    sol, numit, record_fixed = AdaProx.fixed_proxgrad(
+        zeros(n),
+        f = Counting(f),
+        g = g,
+        gamma = gam_init,
+        tol = tol,
+        maxit = maxit,
+        record_fn = record_pg,
+    )
+    @info "PGM, fixed step 1/Lf"
+    @info "    iterations: $(numit)"
+    @info "     objective: $(f(sol) + g(sol))"
+
+    sol, numit, record_backtracking = AdaProx.backtracking_proxgrad(
         zeros(n),
         f = Counting(f),
         g = g,
         gamma0 = 1.0,
         tol = tol,
-        maxit = maxit,
+        maxit = maxit/2,
         record_fn = record_pg,
     )
     @info "PGM, backtracking step"
     @info "    iterations: $(numit)"
     @info "     objective: $(f(sol) + g(sol))"
 
-    sol, numit, record_backtracking_nesterov = backtracking_nesterov(
+    sol, numit, record_backtracking_nesterov = AdaProx.backtracking_nesterov(
         zeros(n),
         f = Counting(f),
         g = g,
         gamma0 = 1.0,
         tol = tol,
-        maxit = maxit,
+        maxit = maxit/2,
         record_fn = record_pg,
     )
     @info "Nesterov PGM, backtracking step"
     @info "    iterations: $(numit)"
     @info "     objective: $(f(sol) + g(sol))"
 
-    sol, numit, record_mm = adaptive_proxgrad(
+    sol, numit, record_mm = AdaProx.adaptive_proxgrad(
         zeros(n),
         f = Counting(f),
         g = g,
-        rule = MalitskyMishchenkoRule(gamma = 0.001),
+        rule = AdaProx.MalitskyMishchenkoRule(gamma = 1.0),
         tol = tol,
         maxit = maxit,
         record_fn = record_pg,
@@ -121,11 +120,11 @@ function run_cubic_logreg_data(
     @info "    iterations: $(numit)"
     @info "     objective: $(f(sol) + g(sol))"
 
-    sol, numit, record_our = adaptive_proxgrad(
+    sol, numit, record_our = AdaProx.adaptive_proxgrad(
         zeros(n),
         f = Counting(f),
         g = g,
-        rule = OurRule(gamma = 1.0),
+        rule = AdaProx.OurRule(gamma = 1.0),
         tol = tol,
         maxit = maxit,
         record_fn = record_pg,
@@ -135,7 +134,7 @@ function run_cubic_logreg_data(
     @info "     objective: $(f(sol) + g(sol))"
 
     @info "Running aGRAAL"
-    sol, numit, record_agraal = agraal(
+    sol, numit, record_agraal = AdaProx.agraal(
         zeros(n),
         f = Counting(f),
         g = g,
@@ -150,7 +149,7 @@ function run_cubic_logreg_data(
 
 
     to_plot = Dict(
-        # "PGM (fixed step 1/L)" => concat_dicts(record_fixed),
+        "PGM (fixed step 1/L)" => concat_dicts(record_fixed),
         "PGM-ls" => concat_dicts(record_backtracking),
         "Nesterov-ls" => concat_dicts(record_backtracking_nesterov),
         "AdaPGM-MM" => concat_dicts(record_mm),
@@ -161,7 +160,7 @@ function run_cubic_logreg_data(
     @info "Plotting"
 
     plot(
-        title = "cubic regularization ($(basename(filename)))",
+        title = "Logistic regression ($(basename(filename)))",
         xlabel = L"\nabla f\ \mbox{evaluations}",
         ylabel = L"F(x^k) - F_\star",
     )
@@ -169,68 +168,69 @@ function run_cubic_logreg_data(
         plot!(
             to_plot[k][:grad_f_evals],
             max.(1e-14, to_plot[k][:objective] .- optimum),
+            # max.(1e-14, to_plot[k][:norm_res]),
             yaxis = :log,
             label = k,
         )
     end
-    savefig(joinpath(@__DIR__, "convergence_cubic_$(basename(filename)).pdf"))
+    savefig(joinpath(
+        @__DIR__,
+        "convergence_logreg_l1_$(basename(filename)).pdf"
+    ))
 
     @info "Exporting plot data"
 
     save_labels = Dict(
-        # "PGM (fixed step 1/L)" => "PGM_fixed",
+        "PGM (fixed step 1/L)" => "PGM_fixed",
         "PGM-ls" => "PGM_bt",
         "Nesterov-ls" => "Nesterov_bt",
         "AdaPGM-MM" => "PGM_MM",
         "AdaPGM" => "PGM_our",
         "aGRAAL" => "aGraal",
     )
+
     p = 1.0 # potential identifier
+
     for k in keys(to_plot)
         d = length(to_plot[k][:grad_f_evals])
-        rr = Int(ceil(d / 80)) # keeping at most 80 data points
-        output = [to_plot[k][:grad_f_evals] to_plot[k][:gamma]]
-        red_output = output[1:rr:end, :]
-        filename = "$(save_labels[k])-$m-$n-$(Int(ceil(lam*100)))-$(Int(p)).txt"
-        filepath = joinpath(@__DIR__, "convergence_plot_data", filename)
-        mkpath(dirname(filepath))
-        open(filepath, "w") do io
-            writedlm(io, red_output)
-        end
-    end
-    for k in keys(to_plot)
-        d = length(to_plot[k][:grad_f_evals])
-        rr = Int(ceil(d / 50)) # keeping at most 50 data points
+        rr = Int(ceil(d / 80)) # keeping at most 50 data points
         output = [to_plot[k][:grad_f_evals] max.(1e-14, to_plot[k][:objective] .- optimum)]
         red_output = output[1:rr:end, :]
-        filename = "$(save_labels[k])-$m-$n-$(Int(ceil(lam*100)))-$(Int(p)).txt"
+        filename = "$(save_labels[k])-$m-$n-$(Int(ceil(lam)))-$(Int(p)).txt"
         filepath = joinpath(@__DIR__, "convergence_plot_data", filename)
         mkpath(dirname(filepath))
         open(filepath, "w") do io
             writedlm(io, red_output)
         end
     end
+
+    for k in keys(to_plot)
+        d = length(to_plot[k][:grad_f_evals])
+        rr = Int(ceil(d / d)) # keeping at most 50 data points
+        output = [1:d to_plot[k][:gamma]]
+        red_output = output[1:rr:end, :]
+        filename = "$(save_labels[k])-$m-$n-$(Int(ceil(lam)))-$(Int(p)).txt"
+        filepath = joinpath(@__DIR__, "gamma_plot_data", filename)
+        mkpath(dirname(filepath))
+        open(filepath, "w") do io
+            writedlm(io, red_output)
+        end
+    end
+    
 end
 
-
 function main()
-    run_cubic_logreg_data(
+    run_logreg_l1_data(
         joinpath(@__DIR__, "..", "datasets", "mushrooms"),
-        lam = 1,
-        maxit = 100,
-        tol = 1e-7,
+        lam = 0.01, maxit = 2000, tol = 1e-7
     )
-    run_cubic_logreg_data(
-        joinpath(@__DIR__, "..", "datasets", "phishing"),
-        lam = 1,
-        maxit = 100,
-        tol = 1e-7,
-    )
-    run_cubic_logreg_data(
+    run_logreg_l1_data(
         joinpath(@__DIR__, "..", "datasets", "a5a"),
-        lam = 1,
-        maxit = 100,
-        tol = 1e-7,
+        lam = 0.01, maxit = 2000, tol = 1e-7
+    )
+    run_logreg_l1_data(
+        joinpath(@__DIR__, "..", "datasets", "phishing"),
+        lam = 0.01, maxit = 2000, tol = 1e-7
     )
 end
 

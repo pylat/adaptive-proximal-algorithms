@@ -24,14 +24,14 @@ function (g::Counting)(x)
     g.f(x)
 end
 
-function gradient(g::Counting, x)
+function ProximalCore.gradient!(grad, g::Counting, x)
     g.count_gradient += 1
-    gradient(g.f, x)
+    ProximalCore.gradient!(grad, g.f, x)
 end
 
 function ProximalCore.prox!(y, g::Counting, x, gamma)
     g.count_prox += 1
-    prox!(y, g.f, x, gamma)
+    ProximalCore.prox!(y, g.f, x, gamma)
 end
 
 struct AdjointOperator{O}

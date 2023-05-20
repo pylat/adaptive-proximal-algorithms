@@ -1,6 +1,8 @@
+module AdaProx
+
 using Logging
 using LinearAlgebra
-using ProximalCore: prox, convex_conjugate, Zero
+using ProximalCore: prox, gradient, convex_conjugate, Zero
 
 # Utilities.
 
@@ -591,4 +593,6 @@ function malitsky_pock(
         end
     end
     return x, y, maxit, record
+end
+
 end

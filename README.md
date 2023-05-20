@@ -15,7 +15,7 @@ Run the following from the repository root:
 julia --project=./experiments -e 'using Pkg; Pkg.develop(path="."); Pkg.instantiate()'
 
 # download datasets for experiments
-julia --project=./experiments download_datasets.jl
+julia --project=./experiments experiments/download_datasets.jl
 ```
 
 Then run the scripts from the subfolders.

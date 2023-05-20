@@ -8,18 +8,21 @@ Algorithms are implemented [here](./src/AdaProx.jl).
 
 ## Running experiments
 
-Navigate to the `experiments` folder and run the following:
+Run the following from the repository root:
 
-```
-julia --project=. -e "using Pkg; Pkg.instantiate()" # instantiate environment
-julia --project=. download_datasets.jl # download datasets for experiments
+```sh
+# set up environment
+julia --project=./experiments -e 'using Pkg; Pkg.develop(path="."); Pkg.instantiate()'
+
+# download datasets for experiments
+julia --project=./experiments download_datasets.jl
 ```
 
 Then run the scripts from the subfolders.
 For example, run the lasso experiments as follows:
 
-```
-julia --project=. lasso/runme.jl
+```sh
+julia --project=./experiments experiments/lasso/runme.jl
 ```
 
 This will generate plots in the same subfolder.

@@ -6,3 +6,4 @@ Manifest.toml
 experiments/datasets
 experiments/*/*.txt
 experiments/*/*.pdf
+experiments/*/convergence_plot_data

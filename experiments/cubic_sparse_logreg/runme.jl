@@ -1,4 +1,3 @@
-include(joinpath(@__DIR__, "..", "autodiff.jl"))
 include(joinpath(@__DIR__, "..", "counting.jl"))
 include(joinpath(@__DIR__, "..", "recording.jl"))
 include(joinpath(@__DIR__, "..", "libsvm.jl"))
@@ -66,7 +65,6 @@ function run_cubic_logreg_data(
 
     Q, q = logistic_loss_grad_Hessian(X, y, x0)
     f = Cubic(Q, q, lam)
-    f = ZygoteFunction(f)
     g = ProximalCore.Zero()
 
     @info "Getting accurate solution"

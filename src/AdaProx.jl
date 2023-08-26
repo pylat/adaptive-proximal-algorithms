@@ -297,15 +297,19 @@ function adaptive_primal_dual(
     record = []
     h_conj = convex_conjugate(h)
 
-    x_prev = x
-    A_x_prev = A * x_prev
-    grad_x_prev, _ = gradient(f, x_prev)
-
-    x, _ = prox(g, x_prev - gamma * (grad_x_prev + A' * y), gamma)
     A_x = A * x
     grad_x, _ = gradient(f, x)
+    At_y = A' * y
+    v = x - gamma * (grad_x + At_y)
+    x_prev, A_x_prev, grad_x_prev = x, A_x, grad_x
+    x, _ = prox(g, v, gamma)
 
     for it = 1:maxit
+        A_x = A * x
+        grad_x, _ = gradient(f, x)
+
+        primal_res = (v - x) / gamma + grad_x + At_y
+
         gamma_prev = gamma
         (gamma, sigma), state = stepsize(rule, state, x, grad_x, x_prev, grad_x_prev)
         rho = gamma / gamma_prev
@@ -313,16 +317,6 @@ function adaptive_primal_dual(
         w = y + sigma * ((1 + rho) * A_x - rho * A_x_prev)
         y, _ = prox(h_conj, w, sigma)
 
-        At_y = A' * y
-
-        x_prev, A_x_prev, grad_x_prev = x, A_x, grad_x
-        v = x - gamma * (grad_x + At_y)
-        x, _ = prox(g, v, gamma)
-
-        grad_x, _ = gradient(f, x)
-        A_x = A * x
-
-        primal_res = (v - x) / gamma + grad_x + At_y
         dual_res = (w - y) / sigma - A_x
         norm_res = sqrt(norm(primal_res)^2 + norm(dual_res)^2)
 
@@ -335,6 +329,11 @@ function adaptive_primal_dual(
         if norm_res <= tol
             return x, y, it, record
         end
+
+        At_y = A' * y
+        v = x - gamma * (grad_x + At_y)
+        x_prev, A_x_prev, grad_x_prev = x, A_x, grad_x
+        x, _ = prox(g, v, gamma)
     end
     return x, y, maxit, record
 end

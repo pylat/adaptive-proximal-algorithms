@@ -439,16 +439,19 @@ function adaptive_linesearch_primal_dual(
     record = []
     h_conj = convex_conjugate(h)
 
-    x_prev = x
-    A_x_prev = A * x_prev
-    grad_x_prev, _ = gradient(f, x_prev)
-
-    At_y = A' * y
-    x, _ = prox(g, x_prev - gamma * (grad_x_prev + At_y), gamma)
     A_x = A * x
     grad_x, _ = gradient(f, x)
+    At_y = A' * y
+    v = x - gamma * (grad_x + At_y)
+    x_prev, A_x_prev, grad_x_prev = x, A_x, grad_x
+    x, _ = prox(g, v, gamma)
 
     for it = 1:maxit
+        A_x = A * x
+        grad_x, _ = gradient(f, x)
+
+        primal_res = (v - x) / gamma + grad_x + At_y
+
         C = norm(grad_x - grad_x_prev)^2 / dot(grad_x - grad_x_prev, x - x_prev) |> nan_to_zero
         L = dot(grad_x - grad_x_prev, x - x_prev) / norm(x - x_prev)^2 |> nan_to_zero
         Delta = gamma * L * (gamma * C - 1)
@@ -487,14 +490,6 @@ function adaptive_linesearch_primal_dual(
             eta_hat = r * eta_hat
         end
 
-        x_prev, A_x_prev, grad_x_prev = x, A_x, grad_x
-        v = x - gamma * (grad_x + At_y)
-        x, _ = prox(g, v, gamma)
-
-        grad_x, _ = gradient(f, x)
-        A_x = A * x
-
-        primal_res = (v - x) / gamma + grad_x + At_y
         dual_res = (w - y) / sigma - A_x
         norm_res = sqrt(norm(primal_res)^2 + norm(dual_res)^2)
 
@@ -507,6 +502,10 @@ function adaptive_linesearch_primal_dual(
         if norm_res <= tol
             return x, y, it, record
         end
+
+        v = x - gamma * (grad_x + At_y)
+        x_prev, A_x_prev, grad_x_prev = x, A_x, grad_x
+        x, _ = prox(g, v, gamma)
     end
     return x, y, maxit, record
 end

@@ -1,4 +1,3 @@
-include(joinpath(@__DIR__, "..", "autodiff.jl"))
 include(joinpath(@__DIR__, "..", "counting.jl"))
 include(joinpath(@__DIR__, "..", "recording.jl"))
 include(joinpath(@__DIR__, "..", "libsvm.jl"))

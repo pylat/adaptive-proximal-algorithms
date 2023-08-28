@@ -4,7 +4,11 @@ using Logging
 using LinearAlgebra
 using ProximalCore: prox, gradient, convex_conjugate, Zero
 
+const Record = Logging.LogLevel(-1)
+
 # Utilities.
+
+include("./counting.jl")
 
 is_logstep(n; base = 10) = mod(n, base^(log(base, n) |> floor)) == 0
 
@@ -35,51 +39,39 @@ function backtrack_stepsize(gamma, f, g, x, f_x, grad_x)
     return gamma, z, f_z, grad_z
 end
 
-function backtracking_proxgrad(x0; f, g, gamma0, tol = 1e-5, maxit = 100_000, record_fn = nothing)
+function backtracking_proxgrad(x0; f, g, gamma0, tol = 1e-5, maxit = 100_000, name = "Backtracking PG")
     x, z, gamma = x0, x0, gamma0
     grad_x, f_x = gradient(f, x)
-    record = []
     for it = 1:maxit
         gamma, z, f_z, grad_z = backtrack_stepsize(gamma, f, g, x, f_x, grad_x)
         norm_res = norm(z - x) / gamma
-        if record_fn !== nothing
-            push!(record, record_fn(x, f, g, gamma, norm_res))
-        end
-        if is_logstep(it, base = 10)
-            @info "Backtracking PG" it norm_res
-        end
+        @logmsg Record "" method=name it gamma norm_res objective=(nocount(f)(x) + nocount(g)(x)) grad_f_evals=record_grad_count(f) prox_g_evals=record_prox_count(g)
         if norm_res <= tol
-            return z, it, record
+            return z, it
         end
         x, f_x, grad_x = z, f_z, grad_z
     end
-    return z, maxit, record
+    return z, maxit
 end
 
-function backtracking_nesterov(x0; f, g, gamma0, tol = 1e-5, maxit = 100_000, record_fn = nothing)
+function backtracking_nesterov(x0; f, g, gamma0, tol = 1e-5, maxit = 100_000, name = "Backtracking Nesterov")
     x, z, gamma = x0, x0, gamma0
     theta = one(gamma)
     grad_x, f_x = gradient(f, x)
-    record = []
     for it = 1:maxit
         z_prev = z
         gamma, z, _, _ = backtrack_stepsize(gamma, f, g, x, f_x, grad_x)
         norm_res = norm(z - x) / gamma
-        if record_fn !== nothing
-            push!(record, record_fn(x, f, g, gamma, norm_res))
-        end
-        if is_logstep(it, base = 10)
-            @info "Backtracking Nesterov PG" it norm_res
-        end
+        @logmsg Record "" method=name it gamma norm_res objective=(nocount(f)(x) + nocount(g)(x)) grad_f_evals=record_grad_count(f) prox_g_evals=record_prox_count(g)
         if norm_res <= tol
-            return z, it, record
+            return z, it
         end
         theta_prev = theta
         theta = (1 + sqrt(1 + 4 * theta_prev^2)) / 2
         x = z + (theta_prev - 1) / theta * (z - z_prev)
         grad_x, f_x = gradient(f, x)
     end
-    return z, maxit, record
+    return z, maxit
 end
 
 # Fixed stepsize fast proximal gradient
@@ -98,7 +90,7 @@ function fixed_nesterov(
     theta = nothing,
     tol = 1e-5,
     maxit = 100_000,
-    record_fn = nothing,
+    name = "Fixed Nesterov"
 )
     @assert (gamma === nothing) != (Lf === nothing)
     if gamma === nothing
@@ -116,7 +108,6 @@ function fixed_nesterov(
     end
     @assert 0 <= theta <= 1 / sqrt(q)
     x, x_prev = x0, x0
-    record = []
     for it = 1:maxit
         theta_prev = theta
         if mu == 0
@@ -131,17 +122,12 @@ function fixed_nesterov(
         x_prev = x
         x, _ = prox(g, z - gamma * grad_z, gamma)
         norm_res = norm(x - z) / gamma
-        if record_fn !== nothing
-            push!(record, record_fn(x, f, g, gamma, norm_res))
-        end
-        if is_logstep(it, base = 10)
-            @info "Fixed Nesterov PG" it norm_res
-        end
+        @logmsg Record "" method=name it gamma norm_res objective=(nocount(f)(x) + nocount(g)(x)) grad_f_evals=record_grad_count(f) prox_g_evals=record_prox_count(g)
         if norm_res <= tol
-            return x, it, record
+            return x, it
         end
     end
-    return x, maxit, record
+    return x, maxit
 end
 
 # Adaptive Golden Ratio Algorithm.
@@ -160,7 +146,7 @@ function agraal(
     phi = 1.5,
     tol = 1e-5,
     maxit = 100_000,
-    record_fn = nothing,
+    name = "aGRAAL"
 )
     if x0 === nothing
         x0 = x1 + randn(size(x1))
@@ -174,7 +160,6 @@ function agraal(
     gamma = gamma0
     rho = 1 / phi + 1 / phi^2
     theta = one(gamma)
-    record = []
     for it = 1:maxit
         C = norm(x - x_prev)^2 / norm(grad_x - grad_x_prev)^2
         gamma_prev = gamma
@@ -184,18 +169,13 @@ function agraal(
         x_prev, grad_x_prev = x, grad_x
         x, _ = prox(g, x_bar - gamma * grad_x_prev, gamma)
         norm_res = norm(x - x_prev) / gamma
-        if record_fn !== nothing
-            push!(record, record_fn(x, f, g, gamma, norm_res))
-        end
-        if is_logstep(it, base = 10)
-            @info "aGRAAL" it norm_res
-        end
+        @logmsg Record "" method=name it gamma norm_res objective=(nocount(f)(x) + nocount(g)(x)) grad_f_evals=record_grad_count(f) prox_g_evals=record_prox_count(g)
         if norm_res <= tol
-            return x, it, record
+            return x, it
         end
         grad_x, _ = gradient(f, x)
     end
-    return x, maxit, record
+    return x, maxit
 end
 
 # Fixed-step and adaptive primal-dual and proximal-gradient methods.
@@ -290,11 +270,9 @@ function adaptive_primal_dual(
     rule,
     tol = 1e-5,
     maxit = 10_000,
-    record_fn = nothing,
     name = "AdaPDM",
 )
     (gamma, sigma), state = stepsize(rule)
-    record = []
     h_conj = convex_conjugate(h)
 
     A_x = A * x
@@ -320,14 +298,9 @@ function adaptive_primal_dual(
         dual_res = (w - y) / sigma - A_x
         norm_res = sqrt(norm(primal_res)^2 + norm(dual_res)^2)
 
-        if record_fn !== nothing
-            push!(record, record_fn(x, y, f, g, h, A, gamma, sigma, norm_res))
-        end
-        if is_logstep(it, base = 10)
-            @info "$name" it norm_res
-        end
+        @logmsg Record "" method=name it gamma sigma norm_res objective=obj(f, g, h, A, x) grad_f_evals=record_grad_count(f) prox_g_evals=record_prox_count(g) prox_h_evals=record_prox_count(h) A_evals=record_mul_count(A) At_evals=record_amul_count(A)
         if norm_res <= tol
-            return x, y, it, record
+            return x, y, it
         end
 
         At_y = A' * y
@@ -335,7 +308,7 @@ function adaptive_primal_dual(
         x_prev, A_x_prev, grad_x_prev = x, A_x, grad_x
         x, _ = prox(g, v, gamma)
     end
-    return x, y, maxit, record
+    return x, y, maxit
 end
 
 function vu_condat(
@@ -351,7 +324,6 @@ function vu_condat(
     norm_A = nothing,
     tol = 1e-5,
     maxit = 10_000,
-    record_fn = nothing,
     name = "Vu-Condat",
 )
     # # NOTE: Peviously I had parameter selection as per [Thm 3.1, Condat 2013]
@@ -387,27 +359,21 @@ function vu_condat(
     end
     @assert gamma !== nothing && sigma !== nothing
     rule = FixedStepsize(gamma, sqrt(sigma / gamma))
-    return adaptive_primal_dual(x, y; f, g, h, A, rule, tol, maxit, record_fn, name)
+    return adaptive_primal_dual(x, y; f, g, h, A, rule, tol, maxit, name)
 end
 
-function adaptive_proxgrad(x; f, g, rule, tol = 1e-5, maxit = 100_000, record_fn = nothing, name = "AdaPGM")
-    pd_record_fn = if record_fn === nothing
-        nothing
-    else
-        (x, _, f, g, _, _, gamma, _, norm_res) -> record_fn(x, f, g, gamma, norm_res)
-    end
-    x, _, numit, record =
-        adaptive_primal_dual(x, zero(x); f, g, h = Zero(), A = 0, rule, tol, maxit, record_fn = pd_record_fn, name)
-    return x, numit, record
+function adaptive_proxgrad(x; f, g, rule, tol = 1e-5, maxit = 100_000, name = "AdaPGM")
+    x, _, numit = adaptive_primal_dual(x, zero(x); f, g, h = Zero(), A = 0, rule, tol, maxit, name)
+    return x, numit
 end
 
-function fixed_proxgrad(x; f, g, gamma, tol = 1e-5, maxit = 100_000, record_fn = nothing, name = "Fixed stepsize PGM")
-    adaptive_proxgrad(x; f, g, rule = FixedStepsize(gamma, one(gamma)), tol, maxit, record_fn, name)
+function fixed_proxgrad(x; f, g, gamma, tol = 1e-5, maxit = 100_000, name = "Fixed stepsize PGM")
+    adaptive_proxgrad(x; f, g, rule = FixedStepsize(gamma, one(gamma)), tol, maxit, name)
 end
 
 # Linesearch version of adaptive_primal_dual ("fully adaptive")
 
-function adaptive_linesearch_primal_dual(
+function adaptive_linesearch_primal_dual_1(
     x,
     y;
     f,
@@ -417,13 +383,12 @@ function adaptive_linesearch_primal_dual(
     gamma = nothing,
     eta = 1.0,
     t = 1.0,
-    delta = 0.0,
+    delta = 1e-8,
     c = (1 + 1e-3) * (delta + 1),
     r = 2,
     tol = 1e-5,
     maxit = 10_000,
-    record_fn = nothing,
-    name = "AdaPDM+",
+    name = "AdaPDM+1",
 )
     @assert eta > 0 "eta must be positive"
 
@@ -436,7 +401,6 @@ function adaptive_linesearch_primal_dual(
 
     delta1 = 1 + delta
     gamma_prev = gamma
-    record = []
     h_conj = convex_conjugate(h)
 
     A_x = A * x
@@ -493,21 +457,104 @@ function adaptive_linesearch_primal_dual(
         dual_res = (w - y) / sigma - A_x
         norm_res = sqrt(norm(primal_res)^2 + norm(dual_res)^2)
 
-        if record_fn !== nothing
-            push!(record, record_fn(x, y, f, g, h, A, gamma, sigma, norm_res))
-        end
-        if is_logstep(it, base = 10)
-            @info "$name" it norm_res
-        end
+        @logmsg Record "" method=name it gamma sigma norm_res objective=obj(f, g, h, A, x) grad_f_evals=record_grad_count(f) prox_g_evals=record_prox_count(g) prox_h_evals=record_prox_count(h) A_evals=record_mul_count(A) At_evals=record_amul_count(A)
         if norm_res <= tol
-            return x, y, it, record
+            return x, y, it
         end
 
         v = x - gamma * (grad_x + At_y)
         x_prev, A_x_prev, grad_x_prev = x, A_x, grad_x
         x, _ = prox(g, v, gamma)
     end
-    return x, y, maxit, record
+    return x, y, maxit
+end
+
+# Simpler version of the previous
+
+function adaptive_linesearch_primal_dual_2(
+    x,
+    y;
+    f,
+    g,
+    h,
+    A,
+    gamma = nothing,
+    eta = 1.0,
+    t = 1.0,
+    delta = 1e-8,
+    c = (1 + 1e-3) * (delta + 1),
+    r = 2,
+    R = 0.9,
+    tol = 1e-5,
+    maxit = 10_000,
+    name = "AdaPDM+2",
+)
+    @assert eta > 0 "eta must be positive"
+
+    if gamma === nothing
+        gamma = 1 / (2 * c * t * eta)
+    end
+
+    @assert gamma <= 1 / (2 * c * t * eta) "gamma is too large"
+
+    delta1 = 1 + delta
+    gamma_prev = gamma
+    h_conj = convex_conjugate(h)
+
+    A_x = A * x
+    grad_x, _ = gradient(f, x)
+    At_y = A' * y
+    v = x - gamma * (grad_x + At_y)
+    x_prev, A_x_prev, grad_x_prev = x, A_x, grad_x
+    x, _ = prox(g, v, gamma)
+
+    for it = 1:maxit
+        A_x = A * x
+        grad_x, _ = gradient(f, x)
+
+        primal_res = (v - x) / gamma + grad_x + At_y
+
+        C = norm(grad_x - grad_x_prev)^2 / dot(grad_x - grad_x_prev, x - x_prev) |> nan_to_zero
+        L = dot(grad_x - grad_x_prev, x - x_prev) / norm(x - x_prev)^2 |> nan_to_zero
+        Delta = gamma * L * (gamma * C - 1)
+        xi_bar = t^2 * gamma^2 * eta^2 * delta1^2
+        m4xim1 = (1 - 4 * xi_bar)
+
+        eta = R * eta
+        w = y
+        sigma = t^2 * gamma
+        while true
+            gamma_next = min(
+                gamma * sqrt(1 + gamma / gamma_prev),
+                1 / (2 * c * t * eta),
+                gamma * sqrt(m4xim1 / (2 * delta1 * (Delta + sqrt(Delta^2 + m4xim1 * (t * eta * gamma)^2)))),
+            )
+            rho = gamma_next / gamma
+            sigma = t^2 * gamma_next
+            w = y + sigma * ((1 + rho) * A_x - rho * A_x_prev)
+            y_next, _ = prox(h_conj, w, sigma)
+            At_y_next = A' * y_next
+            if eta >= norm(At_y_next - At_y) / norm(y_next - y)
+                gamma, gamma_prev = gamma_next, gamma
+                y, At_y = y_next, At_y_next
+                break
+            end
+            eta *= r
+        end
+
+        dual_res = (w - y) / sigma - A_x
+        norm_res = sqrt(norm(primal_res)^2 + norm(dual_res)^2)
+
+        @logmsg Record "" method=name it gamma sigma norm_res objective=obj(f, g, h, A, x) grad_f_evals=record_grad_count(f) prox_g_evals=record_prox_count(g) prox_h_evals=record_prox_count(h) A_evals=record_mul_count(A) At_evals=record_amul_count(A)
+        if norm_res <= tol
+            return x, y, it
+        end
+
+        v = x - gamma * (grad_x + At_y)
+        x_prev, A_x_prev, grad_x_prev = x, A_x, grad_x
+        x, _ = prox(g, v, gamma)
+    end
+    return x, y, maxit
 end
 
 # Algorithm 4 of ``A first-order primal-dual algorithm with linesearch''
@@ -548,7 +595,6 @@ function malitsky_pock(
     t = 1.0, #t = gam/ sig >0
     tol = 1e-5,
     maxit = 10_000,
-    record_fn = nothing,
     name = "MP-ls",
 )
     h_conj = convex_conjugate(h)
@@ -559,7 +605,6 @@ function malitsky_pock(
     y_prev = y
     A_x = A * x
     At_y = A' * y
-    record = []
     for it = 1:maxit
         At_y_prev = At_y 
         w = y + sigma * A_x
@@ -580,17 +625,13 @@ function malitsky_pock(
         primal_res = (v - x) / gamma + grad_x + At_y
         dual_res = (w - y) / sigma_prev - A_x
         norm_res = sqrt(norm(primal_res)^2 + norm(dual_res)^2)
-        if record_fn !== nothing
-            push!(record, record_fn(x, y, f, g, h, A, gamma, sigma, norm_res))
-        end
-        if is_logstep(it, base = 10)
-            @info "$name" it norm_res
-        end
+
+        @logmsg Record "" method=name it gamma sigma norm_res objective=obj(f, g, h, A, x) grad_f_evals=record_grad_count(f) prox_g_evals=record_prox_count(g) prox_h_evals=record_prox_count(h) A_evals=record_mul_count(A) At_evals=record_amul_count(A)
         if norm_res <= tol
-            return x, y, it, record
+            return x, y, it
         end
     end
-    return x, y, maxit, record
+    return x, y, maxit
 end
 
 end

@@ -27,21 +27,21 @@ end
 
     obj_tol = 1e-7
 
-    sol, numit, _ = AdaProx.adaptive_proxgrad(
+    sol, numit = AdaProx.adaptive_proxgrad(
         ones(2), f=f, g=g, rule=AdaProx.OurRule(gamma=1.0),
     )
 
     @test f(sol) < obj_tol
     @test iszero(g(sol))
 
-    sol, numit, _ = AdaProx.backtracking_proxgrad(
+    sol, numit = AdaProx.backtracking_proxgrad(
         ones(2), f=f, g=g, gamma0=1.0,
     )
 
     @test f(sol) < obj_tol
     @test iszero(g(sol))
 
-    sol, numit, _ = AdaProx.backtracking_nesterov(
+    sol, numit = AdaProx.backtracking_nesterov(
         ones(2), f=f, g=g, gamma0=1.0,
     )
 

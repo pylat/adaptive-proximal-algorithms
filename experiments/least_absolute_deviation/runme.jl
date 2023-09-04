@@ -1,21 +1,19 @@
-include(joinpath(@__DIR__, "..", "counting.jl"))
-include(joinpath(@__DIR__, "..", "recording.jl"))
 include(joinpath(@__DIR__, "..", "libsvm.jl"))
-
+include(joinpath(@__DIR__, "..", "logging.jl"))
 
 using LinearAlgebra
 using SparseArrays
+using Logging: with_logger
+using Tables
+using DataFrames
 using Plots
 using LaTeXStrings
-using DelimitedFiles
 using Random
 using ProximalCore: Zero
 using ProximalOperators: NormL1, NormL2, Translate
 using AdaProx
 
 pgfplotsx()
-
-# least absolute deviation
 
 function run_least_absolute_deviation(
     filename,
@@ -24,7 +22,6 @@ function run_least_absolute_deviation(
     seed = 0,
     tol = 1e-5,
     maxit = 1000,
-    t = 1.0,
 ) where {T}
     @info "Start run_least_absolute_deviation ($filename)"
 
@@ -43,148 +40,153 @@ function run_least_absolute_deviation(
 
     norm_A = norm(A)
 
-    solx, soly, numit, record_vc = AdaProx.vu_condat(
+    solx, soly, numit = AdaProx.vu_condat(
         zeros(n + 1),
         zeros(m);
         f = f,
         g = g,
         h = h,
-        A = Counting(A),
+        A = AdaProx.Counting(A),
         Lf = Lf,
         norm_A,
         maxit = maxit,
         tol = tol,
-        record_fn = record_pd,
+        name = "Vu-Condat"
     )
-    @info "Vu-Condat" numit (f(solx) + h(A * solx)) count(!iszero, solx)
 
-    solx, soly, numit, record_mp = AdaProx.malitsky_pock(
+    for t in [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100]
+        solx, soly, numit = AdaProx.malitsky_pock(
+            zeros(n + 1),
+            zeros(m);
+            f = f,
+            g = g,
+            h = h,
+            A = AdaProx.Counting(A),
+            sigma = 1.0,
+            t = t,
+            maxit = maxit,
+            tol = tol,
+            name = "Malitsky-Pock (t=$t)",
+        )
+    end
+
+    for t in [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100]
+        solx, soly, numit = AdaProx.adaptive_linesearch_primal_dual_2(
+            zeros(n + 1),
+            zeros(m);
+            f = f,
+            g = g,
+            h = h,
+            A = AdaProx.Counting(A),
+            t = t,
+            maxit = maxit,
+            tol = tol,
+            name = "AdaPDM+ (t=$t)",
+        )
+    end
+
+    solx, soly, numit = AdaProx.auto_adaptive_linesearch_primal_dual_2(
         zeros(n + 1),
         zeros(m);
         f = f,
         g = g,
         h = h,
-        A = Counting(A),
-        sigma = 1.0,
-        t = t,
+        A = AdaProx.Counting(A),
+        gamma = 1.0,
+        eta = norm(A),
         maxit = maxit,
         tol = tol,
-        record_fn = record_pd,
-    )
-    @info "Malitsky-Pock" numit (f(solx) + h(A * solx)) count(!iszero, solx)
-
-    # solx, soly, numit, record_apd = adaptive_primal_dual(
-    #     zeros(n + 1),
-    #     zeros(m);
-    #     f = f,
-    #     g = g,
-    #     h = h,
-    #     A = Counting(A),
-    #     rule = OurRule(t = t, norm_A = norm_A),
-    #     maxit = maxit,
-    #     tol = tol,
-    #     record_fn = record_pd,
-    # )
-    # @info "Adaptive PD" numit (f(solx) + h(A * solx)) count(!iszero, solx)
-
-    solx, soly, numit, record_fapd = AdaProx.adaptive_linesearch_primal_dual(
-        zeros(n + 1),
-        zeros(m);
-        f = f,
-        g = g,
-        h = h,
-        A = Counting(A),
-        t = t,
-        maxit = maxit,
-        tol = tol,
-        record_fn = record_pd,
-    )
-    @info "Fully Adaptive PD" numit (f(solx) + h(A * solx)) count(!iszero, solx)
-
-    @info "Collecting plot data"
-
-    to_plot = Dict(
-        "Vu-Condat" => concat_dicts(record_vc),
-        "MP" => concat_dicts(record_mp),
-        # "adaPD" => concat_dicts(record_apd),
-        "adaPD+" => concat_dicts(record_fapd),
-    )
-
-
-    @info "exporting data"
-
-    save_labels = Dict(
-        "Vu-Condat" => "Vu-Condat",
-        # "adaPD"     => "adaPD",
-        "MP" => "MP",
-        "adaPD+" => "AdaPD+",
-    )
-    p = Int(floor(t * 1000)) # potential identifier for later!
-    lam = lambda
-
-    for k in keys(to_plot)
-        d = length(to_plot[k][:A_evals])
-        rr = Int(ceil(d / 100)) # keeping at most 50 data points
-        output = [(to_plot[k][:A_evals] + to_plot[k][:At_evals]) max.(
-            1e-14,
-            to_plot[k][:norm_res],
-        )]
-        red_output = output[1:rr:end, :]
-        filename = "$(save_labels[k])_$(m)_$(n)_$(Int(ceil(lam * 100)))_$(Int(p)).txt"
-        filepath = joinpath(@__DIR__, "convergence_plot_data", filename)
-        mkpath(dirname(filepath))
-        open(filepath, "w") do io
-            writedlm(io, red_output)
-        end
-    end
-
-    @info "Plotting"
-
-    plot(
-        title = "run_least_absolute_deviation ($(basename(filename))) with lam$(Int(floor(lambda*100))), t$(Int(floor(t*100)))",
-        xlabel = "#passes through data",
-        ylabel = L"\|v\|",
-    )
-    for k in keys(to_plot)
-        plot!(
-            to_plot[k][:A_evals] + to_plot[k][:At_evals],
-            to_plot[k][:norm_res],
-            yaxis = :log,
-            label = k,
-        )
-    end
-    savefig(
-        joinpath(
-            @__DIR__,
-            "convergence_LAD_$(basename(filename))_lam$(Int(floor(lambda*100)))_t$(Int(floor(t*100))).pdf",
-        )
+        name = "AutoAdaPDM+",
     )
 end
 
+function find_best(gb, names, key, target)
+    best_name, rest_names = Iterators.peel(names)
+    best_length = -1
+    best_val = gb[best_name][!, key][end]
+    if best_val <= target
+        best_length = size(gb[best_name])[1]
+    end
+    for name in rest_names
+        length = size(gb[name])[1]
+        val = gb[name][!, key][end]
+        if best_length >= 0 && val <= target && length < best_length
+            best_name = name
+            best_length = length
+        elseif best_length < 0 && val < best_val
+            best_name = name
+            best_val = val
+        end
+    end
+    return best_name
+end
 
+function plot_residual(path)
+    df = eachline(path) .|> JSON.parse |> Tables.dictrowtable |> DataFrame
+    gb = groupby(df, :method)
 
-function main(; maxit = 1000)
-    # t is the ratio between the primal and the dual stepsizes 
-    for t in [2.0], lam in [1e-1, 1e1]
+    names_to_plot = []
+    for name in ["Vu-Condat", "Malitsky-Pock", "AdaPDM+", "AutoAdaPDM+"]
+        matching_names = [k for k in keys(gb) if startswith(k.method, name)]
+        push!(names_to_plot, find_best(gb, matching_names, :norm_res, 1e-5))
+    end
+
+    fig = plot(
+        title = "Least absolute deviation ($(basename(path)))",
+        xlabel = "#passes through data",
+        ylabel = L"\|v\|",
+    )
+
+    for k in names_to_plot
+        if k.method === nothing
+            continue
+        end
+        plot!(
+            gb[k][!, :A_evals] + gb[k][!, :At_evals],
+            gb[k][!, :norm_res],
+            yaxis = :log,
+            label = k.method,
+        )
+    end
+
+    savefig(fig, joinpath(@__DIR__, "$(basename(path)).pdf"))
+end
+
+function main(; maxit = 10_000)
+    keys_to_log = [:method, :norm_res, :A_evals, :At_evals]
+
+    path = joinpath(@__DIR__, "cpusmall_scale.jsonl")
+    with_logger(get_logger(path, keys_to_log)) do
         run_least_absolute_deviation(
             joinpath(@__DIR__, "../", "datasets", "cpusmall_scale"),
             maxit = maxit,
             tol = 1e-5,
-            t = t,
+            lambda = 1e1,
         )
+    end
+    plot_residual(path)
+
+    path = joinpath(@__DIR__, "abalone.jsonl")
+    with_logger(get_logger(path, keys_to_log)) do
         run_least_absolute_deviation(
             joinpath(@__DIR__, "../", "datasets", "abalone"),
             maxit = maxit,
             tol = 1e-5,
-            t = t,
+            lambda = 1e1,
         )
+    end
+    plot_residual(path)
+
+    path = joinpath(@__DIR__, "housing_scale.jsonl")
+    with_logger(get_logger(path, keys_to_log)) do
         run_least_absolute_deviation(
             joinpath(@__DIR__, "../", "datasets", "housing_scale"),
             maxit = maxit,
             tol = 1e-5,
-            t = t,
+            lambda = 1e1,
         )
     end
+    plot_residual(path)
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__

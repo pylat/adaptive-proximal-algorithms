@@ -3,11 +3,11 @@ using ProximalCore
 
 mutable struct Counting{F,I}
     f::F
-    count_eval::I
-    count_prox::I
-    count_gradient::I
-    count_mul::I
-    count_amul::I
+    eval_count::I
+    prox_count::I
+    grad_count::I
+    mul_count::I
+    amul_count::I
 end
 
 ProximalCore.is_convex(::Type{<:Counting{F}}) where {F} = ProximalCore.is_convex(F)
@@ -20,17 +20,17 @@ Counting(f::F) where {F} = begin
 end
 
 function (g::Counting)(x)
-    g.count_eval += 1
+    g.eval_count += 1
     g.f(x)
 end
 
 function ProximalCore.gradient!(grad, g::Counting, x)
-    g.count_gradient += 1
+    g.grad_count += 1
     ProximalCore.gradient!(grad, g.f, x)
 end
 
 function ProximalCore.prox!(y, g::Counting, x, gamma)
-    g.count_prox += 1
+    g.prox_count += 1
     ProximalCore.prox!(y, g.f, x, gamma)
 end
 
@@ -42,26 +42,26 @@ LinearAlgebra.norm(C::Counting) = norm(C.f)
 LinearAlgebra.adjoint(C::Counting) = AdjointOperator(C)
 
 function Base.:*(C::Counting, x)
-    C.count_mul += 1
+    C.mul_count += 1
     return C.f * x
 end
 
 function Base.:*(A::AdjointOperator{<:Counting}, x)
-    A.op.count_amul += 1
+    A.op.amul_count += 1
     return A.op.f' * x
 end
 
-record_grad_count(_) = nothing
-record_grad_count(c::Counting) = c.count_gradient
+grad_count(_) = nothing
+grad_count(c::Counting) = c.grad_count
 
-record_prox_count(_) = nothing
-record_prox_count(c::Counting) = c.count_prox
+prox_count(_) = nothing
+prox_count(c::Counting) = c.prox_count
 
-record_mul_count(_) = nothing
-record_mul_count(c::Counting) = c.count_mul
+mul_count(_) = nothing
+mul_count(c::Counting) = c.mul_count
 
-record_amul_count(_) = nothing
-record_amul_count(c::Counting) = c.count_amul
+amul_count(_) = nothing
+amul_count(c::Counting) = c.amul_count
 
 nocount(obj) = obj
 nocount(c::Counting) = c.f

@@ -249,7 +249,7 @@ function stepsize(rule::OurRule, (gamma1, gamma0), x1, grad_x1, x0, grad_x0)
     D = gamma1 * L * (gamma1 * C - 1)
     gamma = min(
         gamma1 * sqrt(1 + gamma1 / gamma0),
-        1 / (2 * rule.c * rule.t * rule.norm_A),
+        1 / (2 * rule.Theta * rule.t * rule.norm_A),
         (
             gamma1 * sqrt(1 - 4 * xi * (1 + rule.delta)^2) /
             sqrt(2 * (1 + rule.delta) * (D + sqrt(D^2 + xi * (1 - 4 * xi * (1 + rule.delta)^2))))

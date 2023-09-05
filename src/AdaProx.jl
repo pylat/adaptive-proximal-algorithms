@@ -429,105 +429,7 @@ end
 
 # Linesearch version of adaptive_primal_dual ("fully adaptive")
 
-function adaptive_linesearch_primal_dual_1(
-    x,
-    y;
-    f,
-    g,
-    h,
-    A,
-    gamma = nothing,
-    eta = 1.0,
-    t = 1.0,
-    delta = 1e-8,
-    Theta = (1 + 1e-3) * (delta + 1),
-    r = 2,
-    tol = 1e-5,
-    maxit = 10_000,
-    name = "AdaPDM+1",
-)
-    @assert eta > 0 "eta must be positive"
-
-    eta0 = eta
-    if gamma === nothing
-        gamma = 1 / (2 * Theta * t * eta)
-    end
-
-    @assert gamma <= 1 / (2 * Theta * t * eta) "gamma is too large"
-
-    delta1 = 1 + delta
-    gamma_prev = gamma
-    h_conj = convex_conjugate(h)
-
-    A_x = A * x
-    grad_x, _ = gradient(f, x)
-    At_y = A' * y
-    v = x - gamma * (grad_x + At_y)
-    x_prev, A_x_prev, grad_x_prev = x, A_x, grad_x
-    x, _ = prox(g, v, gamma)
-
-    for it = 1:maxit
-        A_x = A * x
-        grad_x, _ = gradient(f, x)
-
-        primal_res = (v - x) / gamma + grad_x + At_y
-
-        C = norm(grad_x - grad_x_prev)^2 / dot(grad_x - grad_x_prev, x - x_prev) |> nan_to_zero
-        L = dot(grad_x - grad_x_prev, x - x_prev) / norm(x - x_prev)^2 |> nan_to_zero
-        Delta = gamma * L * (gamma * C - 1)
-        xi_bar = t^2 * gamma^2 * eta^2 * delta1^2
-        m4xim1 = (1 - 4 * xi_bar)
-
-        if eta > 0
-            eta_hat = eta
-        else
-            eta_hat = eta0 # R>0
-        end
-        w = y
-        sigma = t^2 * gamma
-        while true
-            gamma_next = min(
-                gamma * sqrt(1 + gamma / gamma_prev),
-                1 / (2 * Theta * t * eta_hat),
-                gamma * sqrt(m4xim1 / (2 * delta1 * (Delta + sqrt(Delta^2 + m4xim1 * (t * eta_hat * gamma)^2)))),
-            )
-            rho = gamma_next / gamma
-            sigma = t^2 * gamma_next
-            w = y + sigma * ((1 + rho) * A_x - rho * A_x_prev)
-            y_next, _ = prox(h_conj, w, sigma)
-            At_y_next = A' * y_next
-            eta_next = norm(At_y_next - At_y) / norm(y_next - y)
-            gamma_max = min(
-                1 / (2 * c * t * eta_next),
-                gamma * sqrt(m4xim1 / (2 * delta1 * (Delta + sqrt(Delta^2 + m4xim1 * (t * eta_next * gamma)^2)))),
-            )
-            if gamma_next <= gamma_max + 1e-12
-                gamma, gamma_prev = gamma_next, gamma
-                y, At_y = y_next, At_y_next
-                eta = eta_next
-                break
-            end
-            eta_hat = r * eta_hat
-        end
-
-        dual_res = (w - y) / sigma - A_x
-        norm_res = sqrt(norm(primal_res)^2 + norm(dual_res)^2)
-
-        @logmsg Record "" method=name it gamma sigma norm_res objective=obj(f, g, h, A, x) grad_f_evals=grad_count(f) prox_g_evals=prox_count(g) prox_h_evals=prox_count(h) A_evals=mul_count(A) At_evals=amul_count(A)
-        if norm_res <= tol
-            return x, y, it
-        end
-
-        v = x - gamma * (grad_x + At_y)
-        x_prev, A_x_prev, grad_x_prev = x, A_x, grad_x
-        x, _ = prox(g, v, gamma)
-    end
-    return x, y, maxit
-end
-
-# Simpler version of the previous
-
-function adaptive_linesearch_primal_dual_2(
+function adaptive_linesearch_primal_dual(
     x,
     y;
     f,
@@ -543,7 +445,7 @@ function adaptive_linesearch_primal_dual_2(
     R = 0.9,
     tol = 1e-5,
     maxit = 10_000,
-    name = "AdaPDM+2",
+    name = "AdaPDM+",
 )
     @assert eta > 0 "eta must be positive"
     @assert Theta > (delta + 1) "must be Theta > (delta + 1)"
@@ -614,7 +516,7 @@ function adaptive_linesearch_primal_dual_2(
     return x, y, maxit
 end
 
-function auto_adaptive_linesearch_primal_dual_2(
+function auto_adaptive_linesearch_primal_dual(
     x,
     y;
     f,
@@ -628,7 +530,7 @@ function auto_adaptive_linesearch_primal_dual_2(
     R = 0.9,
     tol = 1e-5,
     maxit = 10_000,
-    name = "AutoAdaPDM+2",
+    name = "AutoAdaPDM+",
 )
     grad_x, _ = gradient(f, x)
     At_y = A' * y
@@ -648,7 +550,7 @@ function auto_adaptive_linesearch_primal_dual_2(
     end
     gamma = 1 / (2 * Theta * t * eta)
 
-    return adaptive_linesearch_primal_dual_2(
+    return adaptive_linesearch_primal_dual(
         x,
         y;
         f,

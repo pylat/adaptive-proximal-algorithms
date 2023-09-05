@@ -1,9 +1,10 @@
-include(joinpath(@__DIR__, "..", "counting.jl"))
-include(joinpath(@__DIR__, "..", "recording.jl"))
+include(joinpath(@__DIR__, "..", "logging.jl"))
 
 using Random
 using LinearAlgebra
-using DelimitedFiles
+using Logging: with_logger, @logmsg
+using Tables
+using DataFrames
 using Plots
 using LaTeXStrings
 using ProximalCore
@@ -36,8 +37,6 @@ function run_random_lasso(;
 )
     @info "Start Lasso"
 
-    #= implementing 1/2 \|Ax-b\|^2 + λ/2 \|x\|_1
-    		 =#
     Random.seed!(seed)
 
     T = Float64
@@ -77,6 +76,7 @@ function run_random_lasso(;
     b = A * x_star + y_star
     optimum = norm(y_star) / 2 + lam * norm(x_star, 1) # the solution
 
+    @logmsg AdaProx.Record "" method=nothing objective=optimum
 
     Lf = opnorm(A)^2
     gam_init = 1 / Lf
@@ -85,163 +85,108 @@ function run_random_lasso(;
 
     @info "Running solvers"
 
-    sol, numit, record_fixed = AdaProx.fixed_proxgrad(
+    sol, numit = AdaProx.fixed_proxgrad(
         zeros(n),
-        f = Counting(f),
+        f = AdaProx.Counting(f),
         g = g,
         gamma = gam_init,
         tol = tol,
         maxit = maxit,
-        record_fn = record_pg,
+        name = "PGM (1/Lf)"
     )
     @info "PGM, fixed step 1/Lf"
     @info "    iterations: $(numit)"
     @info "     objective: $(f(sol) + g(sol))"
 
-    sol, numit, record_backtracking = AdaProx.backtracking_proxgrad(
+    sol, numit = AdaProx.backtracking_proxgrad(
         zeros(n),
-        f = Counting(f),
+        f = AdaProx.Counting(f),
         g = g,
         gamma0 = 1.0,
         tol = tol,
         maxit = maxit,
-        record_fn = record_pg,
+        name = "PGM (backtracking)"
     )
     @info "PGM, backtracking step"
     @info "    iterations: $(numit)"
     @info "     objective: $(f(sol) + g(sol))"
 
-    sol, numit, record_backtracking_nesterov = AdaProx.backtracking_nesterov(
+    sol, numit = AdaProx.backtracking_nesterov(
         zeros(n),
-        f = Counting(f),
+        f = AdaProx.Counting(f),
         g = g,
         gamma0 = 1.0,
         tol = tol,
         maxit = maxit,
-        record_fn = record_pg,
+        name = "Nesterov (backtracking)"
     )
     @info "Nesterov PGM, backtracking step"
     @info "    iterations: $(numit)"
     @info "     objective: $(f(sol) + g(sol))"
 
-    sol, numit, record_mm = AdaProx.adaptive_proxgrad(
+    sol, numit = AdaProx.adaptive_proxgrad(
         zeros(n),
-        f = Counting(f),
+        f = AdaProx.Counting(f),
         g = g,
         rule = AdaProx.MalitskyMishchenkoRule(gamma = gam_init),
         tol = tol,
         maxit = maxit,
-        record_fn = record_pg,
+        name = "AdaPGM (MM)"
     )
     @info "PGM, MM adaptive step"
     @info "    iterations: $(numit)"
     @info "     objective: $(f(sol) + g(sol))"
 
-    sol, numit, record_our = AdaProx.adaptive_proxgrad(
+    sol, numit = AdaProx.adaptive_proxgrad(
         zeros(n),
-        f = Counting(f),
+        f = AdaProx.Counting(f),
         g = g,
         rule = AdaProx.OurRule(gamma = gam_init),
         tol = tol,
         maxit = maxit,
-        record_fn = record_pg,
+        name = "AdaPGM (Ours)"
     )
     @info "PGM, our adaptive step"
     @info "    iterations: $(numit)"
     @info "     objective: $(f(sol) + g(sol))"
 
     @info "Running aGRAAL"
-    sol, numit, record_agraal = AdaProx.agraal(
+    sol, numit = AdaProx.agraal(
         zeros(n),
-        f = Counting(f),
+        f = AdaProx.Counting(f),
         g = g,
         tol = tol,
         maxit = maxit,
-        record_fn = record_pg,
+        name = "aGRAAL"
     )
     @info "    iterations: $(numit)"
     @info "     objective: $(f(sol) + g(sol))"
+end
 
-    @info "Collecting plot data"
+function plot_convergence(path)
+    df = eachline(path) .|> JSON.parse |> Tables.dictrowtable |> DataFrame
+    optimal_value = minimum(df[!, :objective])
+    gb = groupby(df, :method)
 
-    to_plot = Dict(
-        "PGM (fixed step 1/L)" => concat_dicts(record_fixed),
-        "PGM-ls" => concat_dicts(record_backtracking),
-        "Nesterov-ls" => concat_dicts(record_backtracking_nesterov),
-        "AdaPGM-MM" => concat_dicts(record_mm),
-        "AdaPGM" => concat_dicts(record_our),
-        "aGRAAL" => concat_dicts(record_agraal),
-    )
-
-    @info "Plotting"
-
-    plot(
-        title = "Lasso (random)",
+    fig = plot(
+        title = "Lasso ($(basename(path)))",
         xlabel = L"\nabla f\ \mbox{evaluations}",
         ylabel = L"F(x^k) - F_\star",
     )
-    for k in keys(to_plot)
+
+    for k in keys(gb)
+        if k.method === nothing
+            continue
+        end
         plot!(
-            to_plot[k][:grad_f_evals],
-            max.(1e-14, to_plot[k][:objective] .- optimum),
+            gb[k][!, :grad_f_evals],
+            max.(1e-14, gb[k][!, :objective] .- optimal_value),
             yaxis = :log,
-            label = k,
+            label = k.method,
         )
     end
-    savefig(joinpath(
-        @__DIR__, 
-        "convergence-$(size(A, 1))-$(size(A, 2))-$(Int(ceil(lam * 100)))-$(Int(p)).pdf"
-    ))
 
-    plot(
-        title = "Lasso (random)",
-        xlabel = L"\nabla f\ \mbox{evaluations}",
-        ylabel = L"gamma",
-    )
-    for k in keys(to_plot)
-        plot!(to_plot[k][:grad_f_evals], to_plot[k][:gamma], label = k)
-    end
-    savefig(joinpath(
-        @__DIR__, 
-        "gamma-$(size(A, 1))-$(size(A, 2))-$(Int(ceil(lam * 100)))-$(Int(p)).pdf"
-    ))
-
-    @info "Exporting plot data"
-
-    save_labels = Dict(
-        "PGM (fixed step 1/L)" => "PGM_fixed",
-        "PGM-ls" => "PGM_bt",
-        "Nesterov-ls" => "Nesterov_bt",
-        "AdaPGM-MM" => "PGM_MM",
-        "AdaPGM" => "PGM_our",
-        "aGRAAL" => "aGraal",
-    )
-
-    for k in keys(to_plot)
-        d = length(to_plot[k][:grad_f_evals])
-        rr = Int(ceil(d / 50)) # keeping at most 50 data points
-        output = [to_plot[k][:grad_f_evals] max.(1e-14, to_plot[k][:objective] .- optimum)]
-        red_output = output[1:rr:end, :]
-        filename = "$(save_labels[k])-$(size(A, 1))-$(size(A, 2))-$(Int(ceil(lam * 100)))-$(Int(p)).txt"
-        filepath = joinpath(@__DIR__, "convergence_plot_data", filename)
-        mkpath(dirname(filepath))
-        open(filepath, "w") do io
-            writedlm(io, red_output)
-        end
-    end
-
-    for k in keys(to_plot)
-        d = length(to_plot[k][:grad_f_evals])
-        rr = Int(ceil(d / 200)) # keeping at most 50 data points
-        output = [to_plot[k][:grad_f_evals] to_plot[k][:gamma]]
-        red_output = output[1:rr:end, :]
-        filename = "$(save_labels[k])-$(size(A, 1))-$(size(A, 2))-$(Int(ceil(lam * 100)))-$(Int(p)).txt"
-        filepath = joinpath(@__DIR__, "gamma_plot_data", filename)
-        mkpath(dirname(filepath))
-        open(filepath, "w") do io
-            writedlm(io, red_output)
-        end
-    end
+    savefig(fig, joinpath(@__DIR__, "$(basename(path)).pdf"))
 end
 
 function main()
@@ -251,14 +196,18 @@ function main()
         (4000, 1000, 10),
     ]
     for (m, n, pf) in col
-        run_random_lasso(
-            m = m,
-            n = n,
-            pfactor = pf,
-            maxit = 2000,
-            tol = 1e-7,
-            seed = 0,
-        )
+        path = joinpath(@__DIR__, "lasso_$(m)_$(n)_$(pf).jsonl")
+        with_logger(get_logger(path)) do
+            run_random_lasso(
+                m = m,
+                n = n,
+                pfactor = pf,
+                maxit = 2000,
+                tol = 1e-7,
+                seed = 0,
+            )
+        end
+        plot_convergence(path)
     end
 end
 

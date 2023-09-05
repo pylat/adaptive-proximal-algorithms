@@ -1,11 +1,12 @@
-include(joinpath(@__DIR__, "..", "counting.jl"))
-include(joinpath(@__DIR__, "..", "recording.jl"))
 include(joinpath(@__DIR__, "..", "libsvm.jl"))
+include(joinpath(@__DIR__, "..", "logging.jl"))
 
 using Random
 using LinearAlgebra
 using Statistics
-using DelimitedFiles
+using Logging: with_logger
+using Tables
+using DataFrames
 using Plots
 using LaTeXStrings
 using ProximalCore
@@ -13,7 +14,6 @@ using ProximalOperators: NormL1
 using AdaProx
 
 pgfplotsx()
-
 
 sigm(z) = 1 / (1 + exp(-z))
 
@@ -29,7 +29,6 @@ function ProximalCore.gradient!(grad, f::Cubic, x)
     grad .= f.Q * x + f.q + (f.c * norm(x) / 2) * x
     return (dot(f.q, grad) + dot(f.q, x)) / 2 + norm(x)^3 * f.c / 6
 end
-
 
 function logistic_loss_grad_Hessian(X, y, w)
     probs = sigm.(X * w[1:end-1] .+ w[end])
@@ -69,168 +68,142 @@ function run_cubic_logreg_data(
 
     @info "Getting accurate solution"
 
-    sol, numit, _ = AdaProx.adaptive_proxgrad(
+    sol, numit = AdaProx.adaptive_proxgrad(
         zeros(n),
         f = f,
         g = g,
         rule = AdaProx.OurRule(gamma = 1.0),
         tol = tol / 10,
         maxit = maxit * 10,
+        name = nothing,
     )
-    optimum = f(sol) + g(sol)
 
     @info "Running solvers"
 
-    sol, numit, record_backtracking = AdaProx.backtracking_proxgrad(
+    sol, numit = AdaProx.backtracking_proxgrad(
         zeros(n),
-        f = Counting(f),
+        f = AdaProx.Counting(f),
         g = g,
         gamma0 = 1.0,
         tol = tol,
         maxit = maxit,
-        record_fn = record_pg,
+        name = "PGM (backtracking)",
     )
     @info "PGM, backtracking step"
     @info "    iterations: $(numit)"
     @info "     objective: $(f(sol) + g(sol))"
 
-    sol, numit, record_backtracking_nesterov = AdaProx.backtracking_nesterov(
+    sol, numit = AdaProx.backtracking_nesterov(
         zeros(n),
-        f = Counting(f),
+        f = AdaProx.Counting(f),
         g = g,
         gamma0 = 1.0,
         tol = tol,
         maxit = maxit,
-        record_fn = record_pg,
+        name = "Nesterov (backtracking)",
     )
     @info "Nesterov PGM, backtracking step"
     @info "    iterations: $(numit)"
     @info "     objective: $(f(sol) + g(sol))"
 
-    sol, numit, record_mm = AdaProx.adaptive_proxgrad(
+    sol, numit = AdaProx.adaptive_proxgrad(
         zeros(n),
-        f = Counting(f),
+        f = AdaProx.Counting(f),
         g = g,
         rule = AdaProx.MalitskyMishchenkoRule(gamma = 0.001),
         tol = tol,
         maxit = maxit,
-        record_fn = record_pg,
+        name = "AdaPGM (MM)",
     )
     @info "PGM, MM adaptive step"
     @info "    iterations: $(numit)"
     @info "     objective: $(f(sol) + g(sol))"
 
-    sol, numit, record_our = AdaProx.adaptive_proxgrad(
+    sol, numit = AdaProx.adaptive_proxgrad(
         zeros(n),
-        f = Counting(f),
+        f = AdaProx.Counting(f),
         g = g,
         rule = AdaProx.OurRule(gamma = 1.0),
         tol = tol,
         maxit = maxit,
-        record_fn = record_pg,
+        name = "AdaPGM (Ours)",
     )
     @info "PGM, our adaptive step"
     @info "    iterations: $(numit)"
     @info "     objective: $(f(sol) + g(sol))"
 
-    @info "Running aGRAAL"
-    sol, numit, record_agraal = AdaProx.agraal(
+    sol, numit = AdaProx.agraal(
         zeros(n),
-        f = Counting(f),
+        f = AdaProx.Counting(f),
         g = g,
         tol = tol,
         maxit = maxit,
-        record_fn = record_pg,
+        name = "aGRAAL"
     )
+    @info "aGRAAL"
     @info "    iterations: $(numit)"
     @info "     objective: $(f(sol) + g(sol))"
+end
 
-    @info "Collecting plot data"
+function plot_convergence(path)
+    df = eachline(path) .|> JSON.parse |> Tables.dictrowtable |> DataFrame
+    optimal_value = minimum(df[!, :objective])
+    gb = groupby(df, :method)
 
-
-    to_plot = Dict(
-        # "PGM (fixed step 1/L)" => concat_dicts(record_fixed),
-        "PGM-ls" => concat_dicts(record_backtracking),
-        "Nesterov-ls" => concat_dicts(record_backtracking_nesterov),
-        "AdaPGM-MM" => concat_dicts(record_mm),
-        "AdaPGM" => concat_dicts(record_our),
-        "aGRAAL" => concat_dicts(record_agraal),
-    )
-
-    @info "Plotting"
-
-    plot(
-        title = "cubic regularization ($(basename(filename)))",
+    fig = plot(
+        title = "Cubic regularization ($(basename(path)))",
         xlabel = L"\nabla f\ \mbox{evaluations}",
         ylabel = L"F(x^k) - F_\star",
     )
-    for k in keys(to_plot)
+
+    for k in keys(gb)
+        if k.method === nothing
+            continue
+        end
         plot!(
-            to_plot[k][:grad_f_evals],
-            max.(1e-14, to_plot[k][:objective] .- optimum),
+            gb[k][!, :grad_f_evals],
+            max.(1e-14, gb[k][!, :objective] .- optimal_value),
             yaxis = :log,
-            label = k,
+            label = k.method,
         )
     end
-    savefig(joinpath(@__DIR__, "convergence_cubic_$(basename(filename)).pdf"))
 
-    @info "Exporting plot data"
-
-    save_labels = Dict(
-        # "PGM (fixed step 1/L)" => "PGM_fixed",
-        "PGM-ls" => "PGM_bt",
-        "Nesterov-ls" => "Nesterov_bt",
-        "AdaPGM-MM" => "PGM_MM",
-        "AdaPGM" => "PGM_our",
-        "aGRAAL" => "aGraal",
-    )
-    p = 1.0 # potential identifier
-    for k in keys(to_plot)
-        d = length(to_plot[k][:grad_f_evals])
-        rr = Int(ceil(d / 80)) # keeping at most 80 data points
-        output = [to_plot[k][:grad_f_evals] to_plot[k][:gamma]]
-        red_output = output[1:rr:end, :]
-        filename = "$(save_labels[k])-$m-$n-$(Int(ceil(lam*100)))-$(Int(p)).txt"
-        filepath = joinpath(@__DIR__, "convergence_plot_data", filename)
-        mkpath(dirname(filepath))
-        open(filepath, "w") do io
-            writedlm(io, red_output)
-        end
-    end
-    for k in keys(to_plot)
-        d = length(to_plot[k][:grad_f_evals])
-        rr = Int(ceil(d / 50)) # keeping at most 50 data points
-        output = [to_plot[k][:grad_f_evals] max.(1e-14, to_plot[k][:objective] .- optimum)]
-        red_output = output[1:rr:end, :]
-        filename = "$(save_labels[k])-$m-$n-$(Int(ceil(lam*100)))-$(Int(p)).txt"
-        filepath = joinpath(@__DIR__, "convergence_plot_data", filename)
-        mkpath(dirname(filepath))
-        open(filepath, "w") do io
-            writedlm(io, red_output)
-        end
-    end
+    savefig(fig, joinpath(@__DIR__, "$(basename(path)).pdf"))
 end
 
-
 function main()
-    run_cubic_logreg_data(
-        joinpath(@__DIR__, "..", "datasets", "mushrooms"),
-        lam = 1,
-        maxit = 100,
-        tol = 1e-7,
-    )
-    run_cubic_logreg_data(
-        joinpath(@__DIR__, "..", "datasets", "phishing"),
-        lam = 1,
-        maxit = 100,
-        tol = 1e-7,
-    )
-    run_cubic_logreg_data(
-        joinpath(@__DIR__, "..", "datasets", "a5a"),
-        lam = 1,
-        maxit = 100,
-        tol = 1e-7,
-    )
+    path = joinpath(@__DIR__, "mushrooms.jsonl")
+    with_logger(get_logger(path)) do
+        run_cubic_logreg_data(
+            joinpath(@__DIR__, "..", "datasets", "mushrooms"),
+            lam = 1,
+            maxit = 100,
+            tol = 1e-7,
+        )
+    end
+    plot_convergence(path)
+
+    path = joinpath(@__DIR__, "a5a.jsonl")
+    with_logger(get_logger(path)) do
+        run_cubic_logreg_data(
+            joinpath(@__DIR__, "..", "datasets", "a5a"),
+            lam = 1,
+            maxit = 100,
+            tol = 1e-7,
+        )
+    end
+    plot_convergence(path)
+
+    path = joinpath(@__DIR__, "phishing.jsonl")
+    with_logger(get_logger(path)) do
+        run_cubic_logreg_data(
+            joinpath(@__DIR__, "..", "datasets", "phishing"),
+            lam = 1,
+            maxit = 100,
+            tol = 1e-7,
+        )
+    end
+    plot_convergence(path)
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__

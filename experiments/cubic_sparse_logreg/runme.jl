@@ -132,6 +132,19 @@ function run_cubic_logreg_data(
     @info "    iterations: $(numit)"
     @info "     objective: $(f(sol) + g(sol))"
 
+    sol, numit = AdaProx.auto_adaptive_proxgrad(
+        zeros(n),
+        f = AdaProx.Counting(f),
+        g = g,
+        gamma= 1e5,
+        tol = tol,
+        maxit = maxit,
+        name = "AdaPGM (Ours)",
+    )
+    @info "PGM, our auto adaptive step"
+    @info "    iterations: $(numit)"
+    @info "     objective: $(f(sol) + g(sol))"
+
     sol, numit = AdaProx.agraal(
         zeros(n),
         f = AdaProx.Counting(f),

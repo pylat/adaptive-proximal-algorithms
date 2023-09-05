@@ -403,24 +403,38 @@ function adaptive_proxgrad(x; f, g, rule, tol = 1e-5, maxit = 100_000, name = "A
     return x, numit
 end
 
-function auto_adaptive_proxgrad(x; f, g, gamma, tol = 1e-5, maxit = 100_000, name = "AutoAdaPGM")
+function auto_adaptive_proxgrad(x; f, g, gamma = nothing, tol = 1e-5, maxit = 100_000, name = "AutoAdaPGM")
     grad_x, _ = gradient(f, x)
 
     if norm(grad_x) <= tol
         return x, 0
     end
 
-    @assert gamma > 0
+    if gamma === nothing 
+        xeps = x .+ 1
+        grad_xeps, _ = gradient(f, xeps)
+        L = dot(grad_x - grad_xeps, x - xeps) / norm(x - xeps)^2
+        gamma = iszero(L) ? sqrt(2) * gamma : 1 / L
+    end 
 
-    x_prev, grad_x_prev = x, grad_x
+    @assert gamma > 0
+    
+    x_prev, grad_x_prev, gamma_prev = x, grad_x, gamma
     x, _ = prox(g, x - gamma * grad_x, gamma)
     grad_x, _ = gradient(f, x)
     L = dot(grad_x - grad_x_prev, x - x_prev) / norm(x - x_prev)^2
     gamma = iszero(L) ? sqrt(2) * gamma : 1 / L
 
+    if gamma_prev / gamma > 1e5  # detect if the inital guess was too large
+        x, _ = prox(g, x_prev - gamma * grad_x_prev, gamma)
+        grad_x, _ = gradient(f, x)
+        L = dot(grad_x - grad_x_prev, x - x_prev) / norm(x - x_prev)^2
+        gamma = iszero(L) ? sqrt(2) * gamma : 1 / L
+    end     
+
     rule = OurRule(; gamma, t=1, norm_A=0, delta=0, Theta=1.2)
 
-    return adaptive_proxgrad(x; f, g, rule, tol, maxit, name = name)
+    return adaptive_proxgrad(x_prev; f, g, rule, tol, maxit, name = name)
 end
 
 function fixed_proxgrad(x; f, g, gamma, tol = 1e-5, maxit = 100_000, name = "Fixed stepsize PGM")

@@ -446,7 +446,6 @@ function auto_adaptive_proxgrad(x; f, g, gamma = nothing, tol = 1e-5, maxit = 10
         gamma = iszero(L) ? 1.0 : 1 / L  
     end 
 
-    println(gamma)
     @assert gamma > 0
     
     x_prev, grad_x_prev, gamma_prev = x, grad_x, gamma

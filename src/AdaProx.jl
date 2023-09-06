@@ -318,19 +318,33 @@ function auto_adaptive_primal_dual(
     h,
     A,
     norm_A,
+    gamma = nothing,
     delta = 0,
     tol = 1e-5,
     maxit = 10_000,
     name = "AutoAdaPDM",
 )
-    grad_x, _ = gradient(f, x)
-    At_y = A' * y
-    v = x - gamma * (grad_x + At_y)
-    x_prev, grad_x_prev = x, grad_x
-    x, _ = prox(g, v, gamma)
+
+
+    
     grad_x, _ = gradient(f, x)
 
+    if gamma === nothing 
+        xeps = x .+ 0.1 * max(norm(x),1)
+        grad_xeps, _ = gradient(f, xeps)
+        L = dot(grad_x - grad_xeps, x - xeps) / norm(x - xeps)^2 |> nan_to_zero
+        gamma = iszero(L) ? 1.0 : 1 / L  
+    end 
+
+    @assert gamma > 0
+    
+    x_prev, grad_x_prev, gamma_prev = x, grad_x, gamma
+    At_y = A' * y
+    v = x - gamma * (grad_x + At_y)
+    x, _ = prox(g, v, gamma)
+    grad_x, _ = gradient(f, x)
     L = dot(grad_x - grad_x_prev, x - x_prev) / norm(x - x_prev)^2 |> nan_to_zero
+
 
     if L > 0
         t = L / (4 * norm_A)
@@ -339,7 +353,24 @@ function auto_adaptive_primal_dual(
         t = 1
         Theta = (1 + sqrt(2)) / 2
     end
-    gamma = 1 / (2 * Theta * t * norm_A)
+    gamma = 1 / (2 * Theta * t * norm_A)    
+   
+    if gamma_prev / gamma > 1e5  # detect if the inital guess was too large
+        
+        v = x_prev - gamma * (grad_x_prev + At_y)
+        x, _ = prox(g, v, gamma)
+        grad_x, _ = gradient(f, x)
+        L = dot(grad_x - grad_x_prev, x - x_prev) / norm(x - x_prev)^2 |> nan_to_zero
+
+        if L > 0
+            t = L / (4 * norm_A)
+            Theta = 2 * t * norm_A / (sqrt(16 * t^2 * norm_A^2 + L^2) - L)
+        else
+            t = 1
+            Theta = (1 + sqrt(2)) / 2
+        end
+        gamma = 1 / (2 * Theta * t * norm_A)
+    end     
 
     rule = OurRule(; gamma, t, norm_A, delta, Theta)
 
@@ -411,12 +442,13 @@ function auto_adaptive_proxgrad(x; f, g, gamma = nothing, tol = 1e-5, maxit = 10
     end
 
     if gamma === nothing 
-        xeps = x .+ 1
+        xeps = x .+ 0.1 * max(norm(x),1)
         grad_xeps, _ = gradient(f, xeps)
         L = dot(grad_x - grad_xeps, x - xeps) / norm(x - xeps)^2
-        gamma = iszero(L) ? sqrt(2) * gamma : 1 / L
+        gamma = iszero(L) ? 1.0 : 1 / L  
     end 
 
+    println(gamma)
     @assert gamma > 0
     
     x_prev, grad_x_prev, gamma_prev = x, grad_x, gamma
@@ -456,7 +488,7 @@ function adaptive_linesearch_primal_dual(
     delta = 1e-8,
     Theta = 1.2,
     r = 2,
-    R = 0.9,
+    R = 0.95,
     tol = 1e-5,
     maxit = 10_000,
     name = "AdaPDM+",
@@ -537,41 +569,69 @@ function auto_adaptive_linesearch_primal_dual(
     g,
     h,
     A,
-    gamma,
+    gamma = nothing,
     eta = 1.0,
     delta = 1e-8,
     r = 2,
-    R = 0.9,
+    R = 0.95,
     tol = 1e-5,
     maxit = 10_000,
     name = "AutoAdaPDM+",
 )
-    grad_x, _ = gradient(f, x)
-    At_y = A' * y
-    v = x - gamma * (grad_x + At_y)
-    x_prev, grad_x_prev = x, grad_x
-    x, _ = prox(g, v, gamma)
+
     grad_x, _ = gradient(f, x)
 
+    if gamma === nothing 
+        xeps = x .+ 0.1 * max(norm(x),1)
+        grad_xeps, _ = gradient(f, xeps)
+        L = dot(grad_x - grad_xeps, x - xeps) / norm(x - xeps)^2 |> nan_to_zero
+        gamma = iszero(L) ? 1.0 : 1 / L  
+    end 
+
+    @assert gamma > 0
+    
+    x_prev, grad_x_prev, gamma_prev = x, grad_x, gamma
+    At_y = A' * y
+    v = x - gamma * (grad_x + At_y)
+    x, _ = prox(g, v, gamma)
+    grad_x, _ = gradient(f, x)
     L = dot(grad_x - grad_x_prev, x - x_prev) / norm(x - x_prev)^2 |> nan_to_zero
 
     if L > 0
-        t = L / (4 * eta)
-        Theta = 2 * t * eta / (sqrt(16 * t^2 * eta^2 + L^2) - L)
+        t = L / (4 * norm_A)
+        Theta = 2 * t * norm_A / (sqrt(16 * t^2 * norm_A^2 + L^2) - L)
     else
         t = 1
         Theta = (1 + sqrt(2)) / 2
     end
-    gamma = 1 / (2 * Theta * t * eta)
+    gamma = 1 / (2 * Theta * t * norm_A)    
+   
+    
+    if gamma_prev / gamma > 1e5  # detect if the inital guess was too large
+        
+        v = x_prev - gamma * (grad_x_prev + At_y)
+        x, _ = prox(g, v, gamma)
+        grad_x, _ = gradient(f, x)
+        L = dot(grad_x - grad_x_prev, x - x_prev) / norm(x - x_prev)^2 |> nan_to_zero
 
+        if L > 0
+            t = L / (4 * norm_A)
+            Theta = 2 * t * norm_A / (sqrt(16 * t^2 * norm_A^2 + L^2) - L)
+        else
+            t = 1
+            Theta = (1 + sqrt(2)) / 2
+        end
+        gamma = 1 / (2 * Theta * t * norm_A)  
+    end         
+  
     return adaptive_linesearch_primal_dual(
-        x,
+        x_prev,
         y;
         f,
         g,
         h,
         A,
-        gamma = nothing,
+        gamma = gamma,
         eta = eta,
         t = t,
         delta = delta,

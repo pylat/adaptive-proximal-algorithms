@@ -372,7 +372,7 @@ function auto_adaptive_primal_dual(
 
     rule = OurRule(; gamma, t, norm_A, delta, Theta)
 
-    return adaptive_primal_dual(x, y; f, g, h, A, rule, tol = tol, maxit = maxit, name = name)
+    return adaptive_primal_dual(x_prev, y; f, g, h, A, rule, tol = tol, maxit = maxit, name = name)
 end
 
 

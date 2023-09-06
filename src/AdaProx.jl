@@ -325,8 +325,6 @@ function auto_adaptive_primal_dual(
     name = "AutoAdaPDM",
 )
 
-
-    
     grad_x, _ = gradient(f, x)
 
     if gamma === nothing 
@@ -355,7 +353,7 @@ function auto_adaptive_primal_dual(
     end
     gamma = 1 / (2 * Theta * t * norm_A)    
    
-    if gamma_prev / gamma > 1e5  # detect if the inital guess was too large
+    if gamma_prev / gamma > 1e5  # if the inital guess was too large
         
         v = x_prev - gamma * (grad_x_prev + At_y)
         x, _ = prox(g, v, gamma)
@@ -457,7 +455,7 @@ function auto_adaptive_proxgrad(x; f, g, gamma = nothing, tol = 1e-5, maxit = 10
     L = dot(grad_x - grad_x_prev, x - x_prev) / norm(x - x_prev)^2
     gamma = iszero(L) ? sqrt(2) * gamma : 1 / L
 
-    if gamma_prev / gamma > 1e5  # detect if the inital guess was too large
+    if gamma_prev / gamma > 1e5  # if the inital guess was too large
         x, _ = prox(g, x_prev - gamma * grad_x_prev, gamma)
         grad_x, _ = gradient(f, x)
         L = dot(grad_x - grad_x_prev, x - x_prev) / norm(x - x_prev)^2
@@ -598,16 +596,16 @@ function auto_adaptive_linesearch_primal_dual(
     L = dot(grad_x - grad_x_prev, x - x_prev) / norm(x - x_prev)^2 |> nan_to_zero
 
     if L > 0
-        t = L / (4 * norm_A)
-        Theta = 2 * t * norm_A / (sqrt(16 * t^2 * norm_A^2 + L^2) - L)
+        t = L / (4 * eta)
+        Theta = 2 * t * eta / (sqrt(16 * t^2 * eta^2 + L^2) - L)
     else
-        t = 1
+        t = 1   # to tune
         Theta = (1 + sqrt(2)) / 2
     end
-    gamma = 1 / (2 * Theta * t * norm_A)    
+    gamma = 1 / (2 * Theta * t * eta)    
    
     
-    if gamma_prev / gamma > 1e5  # detect if the inital guess was too large
+    if gamma_prev / gamma > 1e5  # if the inital guess was too large
         
         v = x_prev - gamma * (grad_x_prev + At_y)
         x, _ = prox(g, v, gamma)
@@ -615,13 +613,13 @@ function auto_adaptive_linesearch_primal_dual(
         L = dot(grad_x - grad_x_prev, x - x_prev) / norm(x - x_prev)^2 |> nan_to_zero
 
         if L > 0
-            t = L / (4 * norm_A)
-            Theta = 2 * t * norm_A / (sqrt(16 * t^2 * norm_A^2 + L^2) - L)
+            t = L / (4 * eta)
+            Theta = 2 * t * eta / (sqrt(16 * t^2 * eta^2 + L^2) - L)
         else
             t = 1
             Theta = (1 + sqrt(2)) / 2
         end
-        gamma = 1 / (2 * Theta * t * norm_A)  
+        gamma = 1 / (2 * Theta * t * eta)  
     end         
   
     return adaptive_linesearch_primal_dual(

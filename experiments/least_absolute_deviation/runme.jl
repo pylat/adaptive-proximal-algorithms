@@ -71,7 +71,7 @@ function run_least_absolute_deviation(
     end
 
     for t in [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100]
-        solx, soly, numit = AdaProx.adaptive_linesearch_primal_dual_2(
+        solx, soly, numit = AdaProx.adaptive_linesearch_primal_dual(
             zeros(n + 1),
             zeros(m);
             f = f,
@@ -85,7 +85,7 @@ function run_least_absolute_deviation(
         )
     end
 
-    solx, soly, numit = AdaProx.auto_adaptive_linesearch_primal_dual_2(
+    solx, soly, numit = AdaProx.auto_adaptive_linesearch_primal_dual(
         zeros(n + 1),
         zeros(m);
         f = f,

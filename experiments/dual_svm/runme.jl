@@ -73,7 +73,7 @@ function run_dsvm(
         rule = AdaProx.OurRule(t = t, norm_A = norm(A)),
         maxit = maxit,
         tol = tol,
-        name = "AdaPDM+ (t=$t)",
+        name = "AdaPDM (t=$t)",
     )
 
     solx, soly, num_it = AdaProx.malitsky_pock(

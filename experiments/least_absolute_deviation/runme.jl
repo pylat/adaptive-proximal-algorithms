@@ -85,19 +85,6 @@ function run_least_absolute_deviation(
         )
     end
 
-    solx, soly, numit = AdaProx.auto_adaptive_linesearch_primal_dual(
-        zeros(n + 1),
-        zeros(m);
-        f = f,
-        g = g,
-        h = h,
-        A = AdaProx.Counting(A),
-        # gamma = 1.0,
-        eta = norm(A),
-        maxit = maxit,
-        tol = tol,
-        name = "AutoAdaPDM+",
-    )
 end
 
 function find_best(gb, names, key, target)

@@ -21,7 +21,7 @@ function run_square_root_lasso(
     lambda = 1e-1,
     seed = 0,
     tol = 1e-5,
-    maxit = 500,
+    maxit = 1000,
 ) where {T}
     @info "Start run_square_root_lasso ($filename)"
 

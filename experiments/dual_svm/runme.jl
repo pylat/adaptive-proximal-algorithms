@@ -90,7 +90,7 @@ function run_dsvm(
         name = "Malitsky-Pock (t=$t)",
     )
 
-    solx, soly, num_it = AdaProx.vu_condat(
+    solx, soly, num_it = AdaProx.condat_vu(
         x0,
         y0;
         f = AdaProx.Counting(f),
@@ -100,7 +100,7 @@ function run_dsvm(
         Lf = Lf,
         maxit = maxit,
         tol = tol,
-        name = "Vu-Condat",
+        name = "Condat-Vu",
     )
 end
 

@@ -21,7 +21,7 @@ function run_square_root_lasso(
     lambda = 1e-1,
     seed = 0,
     tol = 1e-5,
-    maxit = 1000,
+    maxit = 500,
 ) where {T}
     @info "Start run_square_root_lasso ($filename)"
 
@@ -36,7 +36,7 @@ function run_square_root_lasso(
     h = Translate(NormL2(), -y)
     A = hcat(Matrix(X), ones(m, 1))
 
-    Lf = lambda
+    Lf = 0.0
 
     norm_A = norm(A)
 
@@ -92,7 +92,7 @@ function run_square_root_lasso(
         g = g,
         h = h,
         A = AdaProx.Counting(A),
-        gamma = 1.0,
+        # gamma = 1.0,
         eta = norm(A),
         maxit = maxit,
         tol = tol,

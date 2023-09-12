@@ -311,7 +311,7 @@ function adaptive_primal_dual(
 end
 
 
-function vu_condat(
+function condat_vu(
     x,
     y;
     f,
@@ -324,7 +324,7 @@ function vu_condat(
     norm_A = nothing,
     tol = 1e-5,
     maxit = 10_000,
-    name = "Vu-Condat",
+    name = "Condat-Vu",
 )
     # # NOTE: Peviously I had parameter selection as per [Thm 3.1, Condat 2013]
     # # Implemented as follows (rho is relaxation parameter)

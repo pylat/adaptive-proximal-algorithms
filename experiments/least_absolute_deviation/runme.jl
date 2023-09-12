@@ -40,7 +40,7 @@ function run_least_absolute_deviation(
 
     norm_A = norm(A)
 
-    solx, soly, numit = AdaProx.vu_condat(
+    solx, soly, numit = AdaProx.condat_vu(
         zeros(n + 1),
         zeros(m);
         f = f,
@@ -51,7 +51,7 @@ function run_least_absolute_deviation(
         norm_A,
         maxit = maxit,
         tol = tol,
-        name = "Vu-Condat"
+        name = "Condat-Vu"
     )
 
     for t in [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100]
@@ -126,7 +126,7 @@ function plot_residual(path)
     gb = groupby(df, :method)
 
     names_to_plot = []
-    for name in ["Vu-Condat", "Malitsky-Pock", "AdaPDM+", "AutoAdaPDM+"]
+    for name in ["Condat-Vu", "Malitsky-Pock", "AdaPDM+", "AutoAdaPDM+"]
         matching_names = [k for k in keys(gb) if startswith(k.method, name)]
         push!(names_to_plot, find_best(gb, matching_names, :norm_res, 1e-5))
     end

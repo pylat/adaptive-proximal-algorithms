@@ -76,7 +76,7 @@ function run_random_lasso(;
     b = A * x_star + y_star
     optimum = norm(y_star) / 2 + lam * norm(x_star, 1) # the solution
 
-    @logmsg AdaProx.Record "" method=nothing objective=optimum
+    @logmsg AdaProx.Record "" method=nothing it=1 objective=optimum
 
     Lf = opnorm(A)^2
     gam_init = 1 / Lf
@@ -102,7 +102,7 @@ function run_random_lasso(;
         zeros(n),
         f = AdaProx.Counting(f),
         g = g,
-        gamma0 = 1.0,
+        gamma0 = gam_init,
         tol = tol,
         maxit = maxit,
         name = "PGM (backtracking)"
@@ -115,7 +115,7 @@ function run_random_lasso(;
         zeros(n),
         f = AdaProx.Counting(f),
         g = g,
-        gamma0 = 1.0,
+        gamma0 = gam_init,
         tol = tol,
         maxit = maxit,
         name = "Nesterov (backtracking)"

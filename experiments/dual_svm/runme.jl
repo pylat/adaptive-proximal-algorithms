@@ -1,18 +1,16 @@
-include(joinpath(@__DIR__, "..", "counting.jl"))
-include(joinpath(@__DIR__, "..", "recording.jl"))
 include(joinpath(@__DIR__, "..", "libsvm.jl"))
+include(joinpath(@__DIR__, "..", "logging.jl"))
 
 
 using LinearAlgebra
 using SparseArrays
+using Logging: with_logger
+using Tables
+using DataFrames
 using AdaProx
-
 using Random
-
 using Plots
 using LaTeXStrings
-
-using DelimitedFiles
 using ProximalCore
 using ProximalOperators: IndBox, IndZero
 
@@ -22,7 +20,6 @@ struct Quadratic{TQ,Tq}
     Q::TQ
     q::Tq
 end
-
 
 function (f::Quadratic)(x)
     temp = f.Q * x
@@ -34,7 +31,6 @@ function ProximalCore.gradient!(grad, f::Quadratic, x)
     grad .= temp + f.q
     return 0.5 * dot(x, temp) + dot(x, f.q)
 end
-
 
 function run_dsvm(
     filename,
@@ -61,58 +57,29 @@ function run_dsvm(
     g = IndBox(0.0, C)
     h = IndZero()
     A = y'
-    # A = Counting(A)
 
     Lf = norm(Q)
-     x0 = zeros(N,1)
+    x0 = zeros(N,1)
     y0 = zeros(1,1)
     norm_A = norm(A)
 
-    
-    println("t is $t")
-
-    @info "Running solvers"
-
-
-    solx, soly, num_it, record_our = AdaProx.adaptive_primal_dual(
+    solx, soly, num_it = AdaProx.adaptive_primal_dual(
         x0,
         y0;
-        f = Counting(f),
+        f = AdaProx.Counting(f),
         g = g,
         h = h,
         A = A,
         rule = AdaProx.OurRule(t = t, norm_A = norm(A)),
         maxit = maxit,
         tol = tol,
-        record_fn = record_pd,
-    )
-    println(
-        "Adaptive PD: $num_it iterations, $(f(solx) + g(solx)) cost, feasibility $(A * solx)",
+        name = "AdaPDM (t=$t)",
     )
 
-
-    # solx, soly, num_it, record_ourpiu = adaptive_linesearch_primal_dual(
-    #     x0,
-    #     y0;
-    #     f = Counting(f),
-    #     g = g,
-    #     h = h,
-    #     A = A,
-    #     eta = 1. * norm_A,
-    #     # c = 1.01, 
-    #     t = t,
-    #     maxit = maxit,
-    #     tol = tol,
-    #     record_fn = record_pd,
-    # )
-    # println(
-    #     "Adaptive PD+: $num_it iterations, $(f(solx) + g(solx)) cost, feasibility $(A * solx)",
-    # )
-
-    solx, soly, num_it, record_MP = AdaProx.malitsky_pock(
+    solx, soly, num_it = AdaProx.malitsky_pock(
         x0,
         y0;
-        f = Counting(f),
+        f = AdaProx.Counting(f),
         g = g,
         h = h,
         A = A,
@@ -120,71 +87,84 @@ function run_dsvm(
         sigma = 1e-2,
         maxit = maxit,
         tol = tol,
-        record_fn = record_pd,
-    )
-    println(
-        "MalitskyPock: $num_it iterations, $(f(solx) + g(solx)) cost, feasibility $(A * solx)",
+        name = "Malitsky-Pock (t=$t)",
     )
 
-
-    solx, soly, num_it, record_Vu = AdaProx.vu_condat(
+    solx, soly, num_it = AdaProx.vu_condat(
         x0,
         y0;
-        f = Counting(f),
+        f = AdaProx.Counting(f),
         g = g,
         h = h,
         A = A,
         Lf = Lf,
         maxit = maxit,
         tol = tol,
-        record_fn = record_pd,
+        name = "Vu-Condat",
     )
-    println(
-        "VuCondat: $num_it iterations, $(f(solx) + g(solx)) cost, feasibility $(A * solx)",
-    )
-
-    @info "Collecting plot data"
-
-    to_plot =
-        Dict(
-            "Vu-Condat" => concat_dicts(record_Vu), 
-            "APDHG" => concat_dicts(record_our),
-            "MP" => concat_dicts(record_MP),
-            # "APDHG+" => concat_dicts(record_ourpiu),
-            )
-
-    @info "Exporting plot data"
-
-    save_labels = Dict(
-        "Vu-Condat" => "Vu-Condat", 
-        "APDHG"     => "APDHG",
-        "MP"        => "MP",
-        # "APDHG+" => "AdaPD+",
-        )
-    p = Int(floor(t*1000)) # potential identifier for later!
-    lam = C
-    
-    for k in keys(to_plot)
-        d = length(to_plot[k][:grad_f_evals])
-        rr = Int(ceil(d / 100)) # keeping at most 50 data points
-        output = [to_plot[k][:grad_f_evals] max.(1e-14, to_plot[k][:norm_res])]
-        red_output = output[1:rr:end, :]
-        filename = "$(save_labels[k])_$(m)_$(n)_$(Int(ceil(lam * 100)))_$(Int(p)).txt"
-        filepath = joinpath(@__DIR__, "convergence_plot_data", filename)
-        mkpath(dirname(filepath))
-        open(filepath, "w") do io
-            writedlm(io, red_output)
-        end
-    end
 end
 
+function plot_residual(path)
+    df = eachline(path) .|> JSON.parse |> Tables.dictrowtable |> DataFrame
+    gb = groupby(df, :method)
 
+    fig = plot(
+        title = "Dual SVM ($(basename(path)))",
+        xlabel = "#passes through data",
+        ylabel = L"\|v\|",
+    )
 
-function main(;maxit = 1000)
-    for t in [1], C  in [0.1, 1]
-        run_dsvm(joinpath(@__DIR__, "../", "datasets", "svmguide3"), maxit = maxit, tol = 1e-5, C = C, t= t)
-        run_dsvm(joinpath(@__DIR__, "../", "datasets", "mushrooms"), maxit = maxit, tol = 1e-5, C = C, t = t)
-        run_dsvm(joinpath(@__DIR__, "../", "datasets", "heart_scale"), maxit = maxit, tol = 1e-5, C = C, t = t)
+    for k in keys(gb)
+        if k.method === nothing
+            continue
+        end
+        plot!(
+            gb[k][!, :grad_f_evals],
+            gb[k][!, :norm_res],
+            yaxis = :log,
+            label = k.method,
+        )
+    end
+
+    savefig(fig, joinpath(@__DIR__, "$(basename(path)).pdf"))
+end
+
+function main(;maxit = 10_000)
+    keys_to_log = [:method, :it, :grad_f_evals, :norm_res]
+
+    for C  in [0.1, 1]
+        path = joinpath(@__DIR__, "svmguide3_C_$(C).jsonl")
+        with_logger(get_logger(path, keys_to_log)) do
+            run_dsvm(
+                joinpath(@__DIR__, "../", "datasets", "svmguide3"),
+                maxit = maxit,
+                tol = 1e-5,
+                C = C
+            )
+        end
+        plot_residual(path)
+
+        path = joinpath(@__DIR__, "mushrooms_C_$(C).jsonl")
+        with_logger(get_logger(path, keys_to_log)) do
+            run_dsvm(
+                joinpath(@__DIR__, "../", "datasets", "mushrooms"),
+                maxit = maxit,
+                tol = 1e-5,
+                C = C
+            )
+        end
+        plot_residual(path)
+
+        path = joinpath(@__DIR__, "heart_scale_C_$(C).jsonl")
+        with_logger(get_logger(path, keys_to_log)) do
+            run_dsvm(
+                joinpath(@__DIR__, "../", "datasets", "heart_scale"),
+                maxit = maxit,
+                tol = 1e-5,
+                C = C
+            )
+        end
+        plot_residual(path)
     end 
 end
 

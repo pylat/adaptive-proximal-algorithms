@@ -118,7 +118,7 @@ function run_logreg_l1_data(
         maxit = maxit,
         name = "AdaPGM (MM)"
     )
-    @info "PGM, MM adaptive step"
+    @info "AdaPGM (MM)"
     @info "    iterations: $(numit)"
     @info "     objective: $(f(sol) + g(sol))"
 
@@ -131,7 +131,7 @@ function run_logreg_l1_data(
         maxit = maxit,
         name = "AdaPGM (Ours)"
     )
-    @info "PGM, our adaptive step"
+    @info "AdaPGM (Ours)"
     @info "    iterations: $(numit)"
     @info "     objective: $(f(sol) + g(sol))"
 

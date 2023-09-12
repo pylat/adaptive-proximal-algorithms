@@ -1,11 +1,15 @@
-include(joinpath(@__DIR__, "..", "counting.jl"))
-include(joinpath(@__DIR__, "..", "recording.jl"))
+include(joinpath(@__DIR__, "..", "logging.jl"))
 
 using LinearAlgebra
+using Logging: with_logger, @logmsg
+using Tables
+using DataFrames
 using ProximalCore
 using AdaProx
 using Plots
 using LaTeXStrings
+
+pgfplotsx()
 
 struct WorstQuadratic{S,T}
     k::S
@@ -34,7 +38,7 @@ function ProximalCore.gradient!(grad, f::WorstQuadratic, x)
     return dot(grad, x) / 2 - (f.L / 8) * x[1]
 end
 
-function main()
+function run_nesterov_worst_case()
     k = 100
     n = 100
 
@@ -50,113 +54,91 @@ function main()
     tol = 1e-6
     maxit = 10_000
 
-    @info "Running solvers"
-
-    sol, numit, record_fixed = AdaProx.fixed_proxgrad(
+    sol, numit = AdaProx.fixed_proxgrad(
         zeros(n),
-        f=Counting(f),
+        f=AdaProx.Counting(f),
         g=g,
         gamma=1 / L,
         tol=tol,
         maxit=maxit,
-        record_fn=record_pg,
     )
-    @info "PGM, fixed step 1/Lf"
-    @info "    iterations: $(numit)"
-    @info "     objective: $(f(sol) + g(sol))"
 
-    sol, numit, record_backtracking = AdaProx.backtracking_proxgrad(
+    sol, numit = AdaProx.backtracking_proxgrad(
         zeros(n),
-        f=Counting(f),
+        f=AdaProx.Counting(f),
         g=g,
         gamma0=1.0,
         tol=tol,
         maxit=maxit,
-        record_fn=record_pg,
     )
-    @info "PGM, backtracking step"
-    @info "    iterations: $(numit)"
-    @info "     objective: $(f(sol) + g(sol))"
 
-    sol, numit, record_fixed_nesterov = AdaProx.fixed_nesterov(
+    sol, numit = AdaProx.fixed_nesterov(
         zeros(n),
-        f=Counting(f),
+        f=AdaProx.Counting(f),
         g=g,
         gamma=1 / L,
         tol=tol,
         maxit=maxit,
-        record_fn=record_pg,
     )
-    @info "Nesterov PGM, backtracking step"
-    @info "    iterations: $(numit)"
-    @info "     objective: $(f(sol) + g(sol))"
 
-    sol, numit, record_backtracking_nesterov = AdaProx.backtracking_nesterov(
+    sol, numit = AdaProx.backtracking_nesterov(
         zeros(n),
-        f=Counting(f),
+        f=AdaProx.Counting(f),
         g=g,
         gamma0=1.0,
         tol=tol,
         maxit=maxit,
-        record_fn=record_pg,
     )
-    @info "Nesterov PGM, backtracking step"
-    @info "    iterations: $(numit)"
-    @info "     objective: $(f(sol) + g(sol))"
 
-    sol, numit, record_mm = AdaProx.adaptive_proxgrad(
+    sol, numit = AdaProx.adaptive_proxgrad(
         zeros(n),
-        f=Counting(f),
+        f=AdaProx.Counting(f),
         g=g,
         rule=AdaProx.MalitskyMishchenkoRule(gamma=1 / L),
         tol=tol,
         maxit=maxit,
-        record_fn=record_pg,
     )
-    @info "PGM, MM adaptive step"
-    @info "    iterations: $(numit)"
-    @info "     objective: $(f(sol) + g(sol))"
 
-    sol, numit, record_our = AdaProx.adaptive_proxgrad(
+    sol, numit = AdaProx.adaptive_proxgrad(
         zeros(n),
-        f=Counting(f),
+        f=AdaProx.Counting(f),
         g=g,
         rule=AdaProx.OurRule(gamma=1 / L),
         tol=tol,
         maxit=maxit,
-        record_fn=record_pg,
     )
-    @info "PGM, our adaptive step"
-    @info "    iterations: $(numit)"
-    @info "     objective: $(f(sol) + g(sol))"
+end
 
-    to_plot = Dict(
-        "PGM (1/L)" => concat_dicts(record_fixed),
-        "PGM (backtracking)" => concat_dicts(record_backtracking),
-        "Nesterov (1/L)" => concat_dicts(record_fixed_nesterov),
-        "Nesterov (backtracking)" => concat_dicts(record_backtracking_nesterov),
-        "AdaPGM-MM" => concat_dicts(record_mm),
-        "AdaPGM" => concat_dicts(record_our),
+function plot_convergence(path)
+    df = eachline(path) .|> JSON.parse |> Tables.dictrowtable |> DataFrame
+    optimal_value = minimum(df[!, :objective])
+    gb = groupby(df, :method)
+
+    fig = plot(
+        title = "Nesterov's worst case",
+        xlabel = L"\nabla f\ \mbox{evaluations}",
+        ylabel = L"F(x^k) - F_\star",
     )
 
-    @info "Plotting"
-
-    plot(
-        xlabel="gradient evals f",
-        ylabel=L"F(x^k) - F_\star",
-    )
-    for k in keys(to_plot)
+    for k in keys(gb)
+        if k.method === nothing
+            continue
+        end
         plot!(
-            to_plot[k][:grad_f_evals],
-            max.(1e-14, to_plot[k][:objective] .- optimum_value),
-            yaxis=:log,
-            label=k,
+            gb[k][!, :grad_f_evals],
+            max.(1e-14, gb[k][!, :objective] .- optimal_value),
+            yaxis = :log,
+            label = k.method,
         )
     end
-    savefig(joinpath(@__DIR__, "cost.pdf"))
+
+    savefig(fig, joinpath(@__DIR__, "$(basename(path)).pdf"))
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__
-    main()
+    path = joinpath(@__DIR__, "nesterov_worst_case.jsonl")
+    with_logger(get_logger(path)) do
+        run_nesterov_worst_case()
+    end
+    plot_convergence(path)
 end
-

@@ -40,3 +40,28 @@ function get_logger(path, keys=nothing, base=10)
         ),
     )
 end
+
+_duration(df, key::Symbol) = maximum(df[!, key])
+
+_duration(df, fun::Function) = maximum(fun(df))
+
+function find_best(gb, names, objective_key, objective_target, duration_key)
+    best_name, rest_names = Iterators.peel(names)
+    best_duration = -1
+    best_val = gb[best_name][!, objective_key][end]
+    if best_val <= objective_target
+        best_duration = _duration(gb[best_name], duration_key)
+    end
+    for name in rest_names
+        duration = _duration(gb[name], duration_key)
+        val = gb[name][!, objective_key][end]
+        if val <= objective_target && (duration < best_duration || best_duration < 0)
+            best_name = name
+            best_duration = duration
+        elseif best_duration < 0 && val < best_val
+            best_name = name
+            best_val = val
+        end
+    end
+    return best_name
+end

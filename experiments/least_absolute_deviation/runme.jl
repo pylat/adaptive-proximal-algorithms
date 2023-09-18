@@ -87,35 +87,14 @@ function run_least_absolute_deviation(
 
 end
 
-function find_best(gb, names, key, target)
-    best_name, rest_names = Iterators.peel(names)
-    best_length = -1
-    best_val = gb[best_name][!, key][end]
-    if best_val <= target
-        best_length = size(gb[best_name])[1]
-    end
-    for name in rest_names
-        length = size(gb[name])[1]
-        val = gb[name][!, key][end]
-        if best_length >= 0 && val <= target && length < best_length
-            best_name = name
-            best_length = length
-        elseif best_length < 0 && val < best_val
-            best_name = name
-            best_val = val
-        end
-    end
-    return best_name
-end
-
 function plot_residual(path)
     df = eachline(path) .|> JSON.parse |> Tables.dictrowtable |> DataFrame
     gb = groupby(df, :method)
 
     names_to_plot = []
-    for name in ["Condat-Vu", "Malitsky-Pock", "AdaPDM+", "AutoAdaPDM+"]
+    for name in ["Condat-Vu", "Malitsky-Pock", "AdaPDM+"]
         matching_names = [k for k in keys(gb) if startswith(k.method, name)]
-        push!(names_to_plot, find_best(gb, matching_names, :norm_res, 1e-5))
+        push!(names_to_plot, find_best(gb, matching_names, :norm_res, 1e-5, df -> df[!, :A_evals] + df[!, :At_evals]))
     end
 
     fig = plot(

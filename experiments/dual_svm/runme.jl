@@ -59,8 +59,8 @@ function run_dsvm(
     A = y'
 
     Lf = norm(Q)
-    x0 = zeros(N,1)
-    y0 = zeros(1,1)
+    x0 = zeros(N)
+    y0 = zeros(1)
     norm_A = norm(A)
 
     solx, soly, num_it = AdaProx.adaptive_primal_dual(

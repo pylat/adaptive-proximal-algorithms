@@ -32,7 +32,7 @@ function ProximalCore.gradient!(grad, f::LogisticLoss, w)
     N = size(f.y, 1)
     grad[1:end-1] .= f.X' * (probs - f.y) ./ N
     grad[end] = mean(probs - f.y)
-    return f(w)
+    return -mean(f.y .* log.(probs) + (1 .- f.y) .* log.(1 .- probs))
 end
 
 function run_logreg_l1_data(
@@ -56,8 +56,7 @@ function run_logreg_l1_data(
     Lf = norm(X1 * X1') / 4 / m
     gam_init = 1 / Lf
 
-    @info "Getting accurate solution"
-
+    # run algorithm with 1/10 the tolerance to get "accurate" solution
     sol, numit = AdaProx.adaptive_proxgrad(
         zeros(n),
         f = f,
@@ -68,8 +67,6 @@ function run_logreg_l1_data(
         name = nothing
     )
 
-    @info "Running solvers"
-
     sol, numit = AdaProx.fixed_proxgrad(
         zeros(n),
         f = AdaProx.Counting(f),
@@ -79,9 +76,6 @@ function run_logreg_l1_data(
         maxit = maxit,
         name = "PGM (1/Lf)"
     )
-    @info "PGM, fixed step 1/Lf"
-    @info "    iterations: $(numit)"
-    @info "     objective: $(f(sol) + g(sol))"
 
     sol, numit = AdaProx.backtracking_proxgrad(
         zeros(n),
@@ -92,9 +86,6 @@ function run_logreg_l1_data(
         maxit = maxit/2,
         name = "PGM (backtracking)"
     )
-    @info "PGM, backtracking step"
-    @info "    iterations: $(numit)"
-    @info "     objective: $(f(sol) + g(sol))"
 
     sol, numit = AdaProx.backtracking_nesterov(
         zeros(n),
@@ -105,9 +96,6 @@ function run_logreg_l1_data(
         maxit = maxit/2,
         name = "Nesterov (backtracking)"
     )
-    @info "Nesterov PGM, backtracking step"
-    @info "    iterations: $(numit)"
-    @info "     objective: $(f(sol) + g(sol))"
 
     sol, numit = AdaProx.adaptive_proxgrad(
         zeros(n),
@@ -118,9 +106,6 @@ function run_logreg_l1_data(
         maxit = maxit,
         name = "AdaPGM (MM)"
     )
-    @info "AdaPGM (MM)"
-    @info "    iterations: $(numit)"
-    @info "     objective: $(f(sol) + g(sol))"
 
     sol, numit = AdaProx.adaptive_proxgrad(
         zeros(n),
@@ -131,11 +116,7 @@ function run_logreg_l1_data(
         maxit = maxit,
         name = "AdaPGM (Ours)"
     )
-    @info "AdaPGM (Ours)"
-    @info "    iterations: $(numit)"
-    @info "     objective: $(f(sol) + g(sol))"
 
-    @info "Running aGRAAL"
     sol, numit = AdaProx.agraal(
         zeros(n),
         f = AdaProx.Counting(f),
@@ -144,8 +125,6 @@ function run_logreg_l1_data(
         maxit = maxit,
         name = "aGRAAL"
     )
-    @info "    iterations: $(numit)"
-    @info "     objective: $(f(sol) + g(sol))"
 end
 
 function plot_convergence(path)

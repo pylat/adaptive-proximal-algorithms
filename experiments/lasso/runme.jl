@@ -35,7 +35,7 @@ function run_random_lasso(;
     kappa = 0.01,
     maxit = 10_000,
 )
-    @info "Start Lasso"
+    @info "Start Lasso ($m by $n)"
 
     Random.seed!(seed)
 
@@ -83,8 +83,6 @@ function run_random_lasso(;
     f = LinearLeastSquares(A, b)
     g = NormL1(lam)
 
-    @info "Running solvers"
-
     sol, numit = AdaProx.fixed_proxgrad(
         zeros(n),
         f = AdaProx.Counting(f),
@@ -94,9 +92,6 @@ function run_random_lasso(;
         maxit = maxit,
         name = "PGM (1/Lf)"
     )
-    @info "PGM, fixed step 1/Lf"
-    @info "    iterations: $(numit)"
-    @info "     objective: $(f(sol) + g(sol))"
 
     sol, numit = AdaProx.backtracking_proxgrad(
         zeros(n),
@@ -107,9 +102,6 @@ function run_random_lasso(;
         maxit = maxit,
         name = "PGM (backtracking)"
     )
-    @info "PGM, backtracking step"
-    @info "    iterations: $(numit)"
-    @info "     objective: $(f(sol) + g(sol))"
 
     sol, numit = AdaProx.backtracking_nesterov(
         zeros(n),
@@ -120,9 +112,6 @@ function run_random_lasso(;
         maxit = maxit,
         name = "Nesterov (backtracking)"
     )
-    @info "Nesterov PGM, backtracking step"
-    @info "    iterations: $(numit)"
-    @info "     objective: $(f(sol) + g(sol))"
 
     sol, numit = AdaProx.adaptive_proxgrad(
         zeros(n),
@@ -133,9 +122,6 @@ function run_random_lasso(;
         maxit = maxit,
         name = "AdaPGM (MM)"
     )
-    @info "AdaPGM (MM)"
-    @info "    iterations: $(numit)"
-    @info "     objective: $(f(sol) + g(sol))"
 
     sol, numit = AdaProx.adaptive_proxgrad(
         zeros(n),
@@ -146,9 +132,6 @@ function run_random_lasso(;
         maxit = maxit,
         name = "AdaPGM (Ours)"
     )
-    @info "AdaPGM (Ours)"
-    @info "    iterations: $(numit)"
-    @info "     objective: $(f(sol) + g(sol))"
 
     @info "Running aGRAAL"
     sol, numit = AdaProx.agraal(
@@ -159,8 +142,6 @@ function run_random_lasso(;
         maxit = maxit,
         name = "aGRAAL"
     )
-    @info "    iterations: $(numit)"
-    @info "     objective: $(f(sol) + g(sol))"
 end
 
 function plot_convergence(path)

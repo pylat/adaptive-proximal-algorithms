@@ -63,32 +63,38 @@ function run_dsvm(
     y0 = zeros(1,1)
     norm_A = norm(A)
 
-    solx, soly, num_it = AdaProx.adaptive_primal_dual(
-        x0,
-        y0;
-        f = AdaProx.Counting(f),
-        g = g,
-        h = h,
-        A = A,
-        rule = AdaProx.OurRule(t = t, norm_A = norm(A)),
-        maxit = maxit,
-        tol = tol,
-        name = "AdaPDM (t=$t)",
-    )
+    t_values = [0.01, 0.15, 0.02, 0.025, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10]
 
-    solx, soly, num_it = AdaProx.malitsky_pock(
-        x0,
-        y0;
-        f = AdaProx.Counting(f),
-        g = g,
-        h = h,
-        A = A,
-        t = t,
-        sigma = 1e-2,
-        maxit = maxit,
-        tol = tol,
-        name = "Malitsky-Pock (t=$t)",
-    )
+    for t in t_values
+        solx, soly, num_it = AdaProx.adaptive_primal_dual(
+            x0,
+            y0;
+            f = AdaProx.Counting(f),
+            g = g,
+            h = h,
+            A = A,
+            rule = AdaProx.OurRule(t = t, norm_A = norm(A)),
+            maxit = maxit,
+            tol = tol,
+            name = "AdaPDM (t=$t)",
+        )
+    end
+
+    for t in t_values
+        solx, soly, num_it = AdaProx.malitsky_pock(
+            x0,
+            y0;
+            f = AdaProx.Counting(f),
+            g = g,
+            h = h,
+            A = A,
+            t = t,
+            sigma = 1/norm_A,
+            maxit = maxit,
+            tol = tol,
+            name = "Malitsky-Pock (t=$t)",
+        )
+    end 
 
     solx, soly, num_it = AdaProx.condat_vu(
         x0,
@@ -108,13 +114,19 @@ function plot_residual(path)
     df = eachline(path) .|> JSON.parse |> Tables.dictrowtable |> DataFrame
     gb = groupby(df, :method)
 
+    names_to_plot = []
+    for name in ["Condat-Vu", "Malitsky-Pock", "AdaPDM"]
+        matching_names = [k for k in keys(gb) if startswith(k.method, name)]
+        push!(names_to_plot, find_best(gb, matching_names, :norm_res, 1e-5, :grad_f_evals))
+    end
+
     fig = plot(
         title = "Dual SVM ($(basename(path)))",
         xlabel = "#passes through data",
         ylabel = L"\|v\|",
     )
 
-    for k in keys(gb)
+    for k in names_to_plot
         if k.method === nothing
             continue
         end
@@ -128,6 +140,7 @@ function plot_residual(path)
 
     savefig(fig, joinpath(@__DIR__, "$(basename(path)).pdf"))
 end
+
 
 function main(;maxit = 10_000)
     keys_to_log = [:method, :it, :grad_f_evals, :norm_res]

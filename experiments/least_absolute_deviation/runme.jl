@@ -40,6 +40,8 @@ function run_least_absolute_deviation(
 
     norm_A = norm(A)
 
+    t_values = [0.01, 0.15, 0.02, 0.025, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100]
+
     solx, soly, numit = AdaProx.condat_vu(
         zeros(n + 1),
         zeros(m);
@@ -54,7 +56,7 @@ function run_least_absolute_deviation(
         name = "Condat-Vu"
     )
 
-    for t in [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100]
+    for t in t_values
         solx, soly, numit = AdaProx.malitsky_pock(
             zeros(n + 1),
             zeros(m);
@@ -70,7 +72,7 @@ function run_least_absolute_deviation(
         )
     end
 
-    for t in [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100]
+    for t in t_values
         solx, soly, numit = AdaProx.adaptive_linesearch_primal_dual(
             zeros(n + 1),
             zeros(m);
@@ -78,6 +80,7 @@ function run_least_absolute_deviation(
             g = g,
             h = h,
             A = AdaProx.Counting(A),
+            eta = norm_A,
             t = t,
             maxit = maxit,
             tol = tol,
@@ -118,7 +121,7 @@ function plot_residual(path)
     savefig(fig, joinpath(@__DIR__, "$(basename(path)).pdf"))
 end
 
-function main(; maxit = 10_000)
+function main(; maxit = 5_000)
     keys_to_log = [:method, :norm_res, :A_evals, :At_evals]
 
     path = joinpath(@__DIR__, "cpusmall_scale.jsonl")

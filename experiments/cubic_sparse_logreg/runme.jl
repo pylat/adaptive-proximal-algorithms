@@ -26,8 +26,8 @@ end
 (f::Cubic)(x) = dot(x, f.Q * x) / 2 + dot(x, f.q) + norm(x)^3 * f.c / 6
 
 function ProximalCore.gradient!(grad, f::Cubic, x)
-    grad .= f.Q * x + f.q + (f.c * norm(x) / 2) * x
-    return (dot(f.q, grad) + dot(f.q, x)) / 2 + norm(x)^3 * f.c / 6
+    grad .= f.Q * x + f.q + (norm(x) * f.c / 2) * x
+    return (dot(x, grad) + dot(f.q, x)) / 2 - norm(x)^3 * f.c / 12
 end
 
 function logistic_loss_grad_Hessian(X, y, w)
@@ -60,14 +60,13 @@ function run_cubic_logreg_data(
     m, n = size(X)
     n = n + 1
 
-    x0 = zeros(n, 1)
+    x0 = zeros(n)
 
     Q, q = logistic_loss_grad_Hessian(X, y, x0)
     f = Cubic(Q, q, lam)
     g = ProximalCore.Zero()
 
-    @info "Getting accurate solution"
-
+    # run algorithm with 1/10 the tolerance to get "accurate" solution
     sol, numit = AdaProx.adaptive_proxgrad(
         zeros(n),
         f = f,
@@ -78,8 +77,6 @@ function run_cubic_logreg_data(
         name = nothing,
     )
 
-    @info "Running solvers"
-
     sol, numit = AdaProx.backtracking_proxgrad(
         zeros(n),
         f = AdaProx.Counting(f),
@@ -89,9 +86,6 @@ function run_cubic_logreg_data(
         maxit = maxit,
         name = "PGM (backtracking)",
     )
-    @info "PGM, backtracking step"
-    @info "    iterations: $(numit)"
-    @info "     objective: $(f(sol) + g(sol))"
 
     sol, numit = AdaProx.backtracking_nesterov(
         zeros(n),
@@ -102,22 +96,16 @@ function run_cubic_logreg_data(
         maxit = maxit,
         name = "Nesterov (backtracking)",
     )
-    @info "Nesterov PGM, backtracking step"
-    @info "    iterations: $(numit)"
-    @info "     objective: $(f(sol) + g(sol))"
 
     sol, numit = AdaProx.adaptive_proxgrad(
         zeros(n),
         f = AdaProx.Counting(f),
         g = g,
-        rule = AdaProx.MalitskyMishchenkoRule(gamma = 0.001),
+        rule = AdaProx.MalitskyMishchenkoRule(gamma = 1.0),
         tol = tol,
         maxit = maxit,
         name = "AdaPGM (MM)",
     )
-    @info "AdaPGM (MM)"
-    @info "    iterations: $(numit)"
-    @info "     objective: $(f(sol) + g(sol))"
 
     sol, numit = AdaProx.adaptive_proxgrad(
         zeros(n),
@@ -128,9 +116,6 @@ function run_cubic_logreg_data(
         maxit = maxit,
         name = "AdaPGM (Ours)",
     )
-    @info "AdaPGM (Ours)"
-    @info "    iterations: $(numit)"
-    @info "     objective: $(f(sol) + g(sol))"
 
     sol, numit = AdaProx.agraal(
         zeros(n),
@@ -140,9 +125,6 @@ function run_cubic_logreg_data(
         maxit = maxit,
         name = "aGRAAL"
     )
-    @info "aGRAAL"
-    @info "    iterations: $(numit)"
-    @info "     objective: $(f(sol) + g(sol))"
 end
 
 function plot_convergence(path)

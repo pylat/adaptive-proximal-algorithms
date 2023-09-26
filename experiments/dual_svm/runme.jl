@@ -59,8 +59,8 @@ function run_dsvm(
     A = y'
 
     Lf = norm(Q)
-    x0 = zeros(N,1)
-    y0 = zeros(1,1)
+    x0 = zeros(N)
+    y0 = zeros(1)
     norm_A = norm(A)
 
     t_values = [0.01, 0.15, 0.02, 0.025, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10]

@@ -28,11 +28,13 @@ function (f::LogisticLoss)(w)
 end
 
 function ProximalCore.gradient!(grad, f::LogisticLoss, w)
-    probs = sigm.(f.X * w[1:end-1] .+ w[end])
+    z = f.X * w[1:end-1] .+ w[end]
+    w = (1 .+ exp.(-z))
+    probs = 1 ./ w
     N = size(f.y, 1)
     grad[1:end-1] .= f.X' * (probs - f.y) ./ N
     grad[end] = mean(probs - f.y)
-    return -mean((f.y .- 1) .* z .- log.(1 .+ exp.(-z)))
+    return -mean((f.y .- 1) .* z .- log.(w))
 end
 
 function run_logreg_l1_data(

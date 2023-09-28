@@ -23,8 +23,8 @@ struct LogisticLoss{TX,Ty}
 end
 
 function (f::LogisticLoss)(w)
-    probs = sigm.(f.X * w[1:end-1] .+ w[end])
-    return -mean(f.y .* log.(probs) + (1 .- f.y) .* log.(1 .- probs))
+    z = f.X * w[1:end-1] .+ w[end]
+    return -mean((f.y .- 1) .* z .- log.(1 .+ exp.(-z)))
 end
 
 function ProximalCore.gradient!(grad, f::LogisticLoss, w)
@@ -32,7 +32,7 @@ function ProximalCore.gradient!(grad, f::LogisticLoss, w)
     N = size(f.y, 1)
     grad[1:end-1] .= f.X' * (probs - f.y) ./ N
     grad[end] = mean(probs - f.y)
-    return -mean(f.y .* log.(probs) + (1 .- f.y) .* log.(1 .- probs))
+    return -mean((f.y .- 1) .* z .- log.(1 .+ exp.(-z)))
 end
 
 function run_logreg_l1_data(

@@ -55,9 +55,10 @@ function run_logreg_l1_data(
     X1 = [X ones(m)]
     Lf = norm(X1 * X1') / 4 / m
 
+    x0 = zeros(n)
     # run algorithm with 1/10 the tolerance to get "accurate" solution
     sol, numit = AdaProx.adaptive_proxgrad(
-        zeros(n),
+        x0,
         f = f,
         g = g,
         rule = AdaProx.OurRule(gamma = 1.0),
@@ -67,7 +68,7 @@ function run_logreg_l1_data(
     )
 
     sol, numit = AdaProx.fixed_proxgrad(
-        zeros(n),
+        x0,
         f = AdaProx.Counting(f),
         g = g,
         gamma = 1.0 / Lf,
@@ -76,28 +77,32 @@ function run_logreg_l1_data(
         name = "PGM (1/Lf)"
     )
 
-    sol, numit = AdaProx.backtracking_proxgrad(
-        zeros(n),
-        f = AdaProx.Counting(f),
-        g = g,
-        gamma0 = 100.0 / Lf,
-        tol = tol,
-        maxit = maxit/2,
-        name = "PGM (backtracking)"
-    )
+    xi_values = [1, 1.5, 2]
+    for xi = xi_values
+        sol, numit = AdaProx.backtracking_proxgrad(
+            zeros(n),
+            f = AdaProx.Counting(f),
+            g = g,
+            gamma0 = 5.0,
+            xi = xi, #increase in stepsize
+            tol = tol,
+            maxit = maxit/2,
+            name = "PGM (backtracking)-(xi=$(xi))"
+        )
+    end
 
     sol, numit = AdaProx.backtracking_nesterov(
-        zeros(n),
+        x0,
         f = AdaProx.Counting(f),
         g = g,
-        gamma0 = 100.0 / Lf,
+        gamma0 = 5.0,
         tol = tol,
         maxit = maxit/2,
         name = "Nesterov (backtracking)"
     )
 
     sol, numit = AdaProx.adaptive_proxgrad(
-        zeros(n),
+        x0,
         f = AdaProx.Counting(f),
         g = g,
         rule = AdaProx.MalitskyMishchenkoRule(gamma = 1.0),
@@ -107,7 +112,7 @@ function run_logreg_l1_data(
     )
 
     sol, numit = AdaProx.adaptive_proxgrad(
-        zeros(n),
+        x0,
         f = AdaProx.Counting(f),
         g = g,
         rule = AdaProx.OurRule(gamma = 1.0),
@@ -117,7 +122,7 @@ function run_logreg_l1_data(
     )
 
     sol, numit = AdaProx.agraal(
-        zeros(n),
+        x0,
         f = AdaProx.Counting(f),
         g = g,
         tol = tol,
@@ -133,7 +138,7 @@ function plot_convergence(path)
 
     fig = plot(
         title = "Logistic regression ($(basename(path)))",
-        xlabel = L"\nabla f\ \mbox{evaluations}",
+        xlabel = L"\mbox{call to } \mathcal A, \mathcal A'",
         ylabel = L"F(x^k) - F_\star",
     )
 

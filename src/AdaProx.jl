@@ -39,13 +39,13 @@ function backtrack_stepsize(gamma, f, g, x, f_x, grad_x)
     return gamma, z, f_z, grad_z
 end
 
-function backtracking_proxgrad(x0; f, g, gamma0, tol = 1e-5, maxit = 100_000, name = "Backtracking PG")
+function backtracking_proxgrad(x0; f, g, gamma0, xi = 1.0 ,tol = 1e-5, maxit = 100_000, name = "Backtracking PG")
     x, z, gamma = x0, x0, gamma0
     grad_x, f_x = gradient(f, x)
     for it = 1:maxit
-        gamma, z, f_z, grad_z = backtrack_stepsize(gamma, f, g, x, f_x, grad_x)
+        gamma, z, f_z, grad_z = backtrack_stepsize(xi * gamma, f, g, x, f_x, grad_x)
         norm_res = norm(z - x) / gamma
-        @logmsg Record "" method=name it gamma norm_res objective=(nocount(f)(x) + nocount(g)(x)) grad_f_evals=grad_count(f) prox_g_evals=prox_count(g)
+        @logmsg Record "" method=name it gamma norm_res objective=(nocount(f)(x) + nocount(g)(x)) grad_f_evals=grad_count(f) prox_g_evals=prox_count(g) f_evals=eval_count(f)
         if norm_res <= tol
             return z, it
         end
@@ -62,7 +62,7 @@ function backtracking_nesterov(x0; f, g, gamma0, tol = 1e-5, maxit = 100_000, na
         z_prev = z
         gamma, z, _, _ = backtrack_stepsize(gamma, f, g, x, f_x, grad_x)
         norm_res = norm(z - x) / gamma
-        @logmsg Record "" method=name it gamma norm_res objective=(nocount(f)(x) + nocount(g)(x)) grad_f_evals=grad_count(f) prox_g_evals=prox_count(g)
+        @logmsg Record "" method=name it gamma norm_res objective=(nocount(f)(x) + nocount(g)(x)) grad_f_evals=grad_count(f) prox_g_evals=prox_count(g) f_evals=eval_count(f)
         if norm_res <= tol
             return z, it
         end
@@ -122,7 +122,7 @@ function fixed_nesterov(
         x_prev = x
         x, _ = prox(g, z - gamma * grad_z, gamma)
         norm_res = norm(x - z) / gamma
-        @logmsg Record "" method=name it gamma norm_res objective=(nocount(f)(x) + nocount(g)(x)) grad_f_evals=grad_count(f) prox_g_evals=prox_count(g)
+        @logmsg Record "" method=name it gamma norm_res objective=(nocount(f)(x) + nocount(g)(x)) grad_f_evals=grad_count(f) prox_g_evals=prox_count(g) f_evals=eval_count(f)
         if norm_res <= tol
             return x, it
         end
@@ -169,7 +169,7 @@ function agraal(
         x_prev, grad_x_prev = x, grad_x
         x, _ = prox(g, x_bar - gamma * grad_x_prev, gamma)
         norm_res = norm(x - x_prev) / gamma
-        @logmsg Record "" method=name it gamma norm_res objective=(nocount(f)(x) + nocount(g)(x)) grad_f_evals=grad_count(f) prox_g_evals=prox_count(g)
+        @logmsg Record "" method=name it gamma norm_res objective=(nocount(f)(x) + nocount(g)(x)) grad_f_evals=grad_count(f) prox_g_evals=prox_count(g) f_evals=eval_count(f)
         if norm_res <= tol
             return x, it
         end
@@ -297,7 +297,7 @@ function adaptive_primal_dual(
         dual_res = (w - y) / sigma - A_x
         norm_res = sqrt(norm(primal_res)^2 + norm(dual_res)^2)
 
-        @logmsg Record "" method=name it gamma sigma norm_res objective=obj(f, g, h, A, x) grad_f_evals=grad_count(f) prox_g_evals=prox_count(g) prox_h_evals=prox_count(h) A_evals=mul_count(A) At_evals=amul_count(A)
+        @logmsg Record "" method=name it gamma sigma norm_res objective=obj(f, g, h, A, x) grad_f_evals=grad_count(f) prox_g_evals=prox_count(g) prox_h_evals=prox_count(h) A_evals=mul_count(A) At_evals=amul_count(A) f_evals=eval_count(f)
         if norm_res <= tol
             return x, y, it
         end
@@ -482,7 +482,7 @@ function adaptive_linesearch_primal_dual(
         dual_res = (w - y) / sigma - A_x
         norm_res = sqrt(norm(primal_res)^2 + norm(dual_res)^2)
 
-        @logmsg Record "" method=name it gamma sigma norm_res objective=obj(f, g, h, A, x) grad_f_evals=grad_count(f) prox_g_evals=prox_count(g) prox_h_evals=prox_count(h) A_evals=mul_count(A) At_evals=amul_count(A)
+        @logmsg Record "" method=name it gamma sigma norm_res objective=obj(f, g, h, A, x) grad_f_evals=grad_count(f) prox_g_evals=prox_count(g) prox_h_evals=prox_count(h) A_evals=mul_count(A) At_evals=amul_count(A) f_evals=eval_count(f)
         if norm_res <= tol
             return x, y, it
         end
@@ -561,7 +561,7 @@ function malitsky_pock(
         dual_res = (w - y) / sigma_prev - A_x
         norm_res = sqrt(norm(primal_res)^2 + norm(dual_res)^2)
 
-        @logmsg Record "" method=name it gamma sigma norm_res objective=obj(f, g, h, A, x) grad_f_evals=grad_count(f) prox_g_evals=prox_count(g) prox_h_evals=prox_count(h) A_evals=mul_count(A) At_evals=amul_count(A)
+        @logmsg Record "" method=name it gamma sigma norm_res objective=obj(f, g, h, A, x) grad_f_evals=grad_count(f) prox_g_evals=prox_count(g) prox_h_evals=prox_count(h) A_evals=mul_count(A) At_evals=amul_count(A) f_evals=eval_count(f)
         if norm_res <= tol
             return x, y, it
         end

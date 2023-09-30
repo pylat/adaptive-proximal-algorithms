@@ -93,15 +93,19 @@ function run_random_lasso(;
         name = "PGM (1/Lf)"
     )
 
-    sol, numit = AdaProx.backtracking_proxgrad(
-        zeros(n),
-        f = AdaProx.Counting(f),
-        g = g,
-        gamma0 = gam_init,
-        tol = tol,
-        maxit = maxit,
-        name = "PGM (backtracking)"
-    )
+    xi_values = [1, 1.5, 2]
+    for xi = xi_values
+        sol, numit = AdaProx.backtracking_proxgrad(
+            zeros(n),
+            f = AdaProx.Counting(f),
+            g = g,
+            gamma0 = gam_init,
+            xi = xi, #increase in stepsize
+            tol = tol,
+            maxit = maxit,
+            name = "PGM (backtracking)-(xi=$(xi))"
+        )
+    end
 
     sol, numit = AdaProx.backtracking_nesterov(
         zeros(n),
@@ -151,7 +155,7 @@ function plot_convergence(path)
 
     fig = plot(
         title = "Lasso ($(basename(path)))",
-        xlabel = L"\nabla f\ \mbox{evaluations}",
+        xlabel = L"\mbox{call to } \mathcal A, \mathcal A'",
         ylabel = L"F(x^k) - F_\star",
     )
 
@@ -160,7 +164,7 @@ function plot_convergence(path)
             continue
         end
         plot!(
-            gb[k][!, :grad_f_evals],
+            2*gb[k][!, :grad_f_evals] + gb[k][!, :f_evals],
             max.(1e-14, gb[k][!, :objective] .- optimal_value),
             yaxis = :log,
             label = k.method,

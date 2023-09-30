@@ -134,7 +134,7 @@ function plot_convergence(path)
 
     fig = plot(
         title = "Cubic regularization ($(basename(path)))",
-        xlabel = L"\nabla f\ \mbox{evaluations}",
+        xlabel = L"# \mbox{ of call to } Q",
         ylabel = L"F(x^k) - F_\star",
     )
 
@@ -143,7 +143,7 @@ function plot_convergence(path)
             continue
         end
         plot!(
-            gb[k][!, :grad_f_evals],
+            gb[k][!, :grad_f_evals] + gb[k][!, :f_evals],
             max.(1e-14, gb[k][!, :objective] .- optimal_value),
             yaxis = :log,
             label = k.method,

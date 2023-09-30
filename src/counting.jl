@@ -66,6 +66,9 @@ amul_count(c::Counting) = c.amul_count
 nocount(obj) = obj
 nocount(c::Counting) = c.f
 
+eval_count(_) = nothing
+eval_count(c::Counting) = c.eval_count
+
 function obj(f, g, h, A, x) 
     y = try 
         nocount(f)(x) +

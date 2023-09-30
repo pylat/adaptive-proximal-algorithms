@@ -147,7 +147,7 @@ function plot_convergence(path)
             continue
         end
         plot!(
-            gb[k][!, :grad_f_evals],
+            2*gb[k][!, :grad_f_evals] + gb[k][!, :f_evals],
             max.(1e-14, gb[k][!, :objective] .- optimal_value),
             yaxis = :log,
             label = k.method,

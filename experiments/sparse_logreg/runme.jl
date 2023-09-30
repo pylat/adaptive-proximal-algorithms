@@ -15,24 +15,24 @@ using AdaProx
 
 pgfplotsx()
 
-sigm(z) = 1 / (1 + exp(-z))
-
 struct LogisticLoss{TX,Ty}
     X::TX
     y::Ty
 end
 
 function (f::LogisticLoss)(w)
-    probs = sigm.(f.X * w[1:end-1] .+ w[end])
-    return -mean(f.y .* log.(probs) + (1 .- f.y) .* log.(1 .- probs))
+    z = f.X * w[1:end-1] .+ w[end]
+    return -mean((f.y .- 1) .* z .- log.(1 .+ exp.(-z)))
 end
 
 function ProximalCore.gradient!(grad, f::LogisticLoss, w)
-    probs = sigm.(f.X * w[1:end-1] .+ w[end])
+    z = f.X * w[1:end-1] .+ w[end]
+    w = (1 .+ exp.(-z))
+    probs = 1 ./ w
     N = size(f.y, 1)
     grad[1:end-1] .= f.X' * (probs - f.y) ./ N
     grad[end] = mean(probs - f.y)
-    return -mean(f.y .* log.(probs) + (1 .- f.y) .* log.(1 .- probs))
+    return -mean((f.y .- 1) .* z .- log.(w))
 end
 
 function run_logreg_l1_data(
@@ -54,7 +54,6 @@ function run_logreg_l1_data(
 
     X1 = [X ones(m)]
     Lf = norm(X1 * X1') / 4 / m
-    gam_init = 1 / Lf
 
     # run algorithm with 1/10 the tolerance to get "accurate" solution
     sol, numit = AdaProx.adaptive_proxgrad(
@@ -71,7 +70,7 @@ function run_logreg_l1_data(
         zeros(n),
         f = AdaProx.Counting(f),
         g = g,
-        gamma = gam_init,
+        gamma = 1.0 / Lf,
         tol = tol,
         maxit = maxit,
         name = "PGM (1/Lf)"
@@ -81,7 +80,7 @@ function run_logreg_l1_data(
         zeros(n),
         f = AdaProx.Counting(f),
         g = g,
-        gamma0 = 1.0,
+        gamma0 = 100.0 / Lf,
         tol = tol,
         maxit = maxit/2,
         name = "PGM (backtracking)"
@@ -91,7 +90,7 @@ function run_logreg_l1_data(
         zeros(n),
         f = AdaProx.Counting(f),
         g = g,
-        gamma0 = 1.0,
+        gamma0 = 100.0 / Lf,
         tol = tol,
         maxit = maxit/2,
         name = "Nesterov (backtracking)"

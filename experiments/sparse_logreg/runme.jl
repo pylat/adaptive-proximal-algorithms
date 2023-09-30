@@ -15,8 +15,6 @@ using AdaProx
 
 pgfplotsx()
 
-sigm(z) = 1 / (1 + exp(-z))
-
 struct LogisticLoss{TX,Ty}
     X::TX
     y::Ty
@@ -56,7 +54,6 @@ function run_logreg_l1_data(
 
     X1 = [X ones(m)]
     Lf = norm(X1 * X1') / 4 / m
-    gam_init = 1 / Lf
 
     x0 = zeros(n)
     # run algorithm with 1/10 the tolerance to get "accurate" solution
@@ -74,7 +71,7 @@ function run_logreg_l1_data(
         x0,
         f = AdaProx.Counting(f),
         g = g,
-        gamma = gam_init,
+        gamma = 1.0 / Lf,
         tol = tol,
         maxit = maxit,
         name = "PGM (1/Lf)"

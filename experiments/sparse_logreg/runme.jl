@@ -56,12 +56,14 @@ function run_logreg_l1_data(
     Lf = norm(X1 * X1') / 4 / m
 
     x0 = zeros(n)
+
+    gam_init = 1.0 / Lf
     # run algorithm with 1/10 the tolerance to get "accurate" solution
     sol, numit = AdaProx.adaptive_proxgrad(
         x0,
         f = f,
         g = g,
-        rule = AdaProx.OurRule(gamma = 1.0),
+        rule = AdaProx.OurRule(gamma = gam_init),
         tol = tol / 10,
         maxit = maxit * 10,
         name = nothing
@@ -71,7 +73,7 @@ function run_logreg_l1_data(
         x0,
         f = AdaProx.Counting(f),
         g = g,
-        gamma = 1.0 / Lf,
+        gamma = gam_init,
         tol = tol,
         maxit = maxit,
         name = "PGM (1/Lf)"
@@ -83,7 +85,7 @@ function run_logreg_l1_data(
             zeros(n),
             f = AdaProx.Counting(f),
             g = g,
-            gamma0 = 5.0,
+            gamma0 = gam_init,
             xi = xi, #increase in stepsize
             tol = tol,
             maxit = maxit/2,
@@ -95,17 +97,26 @@ function run_logreg_l1_data(
         x0,
         f = AdaProx.Counting(f),
         g = g,
-        gamma0 = 5.0,
+        gamma0 = gam_init,
         tol = tol,
         maxit = maxit/2,
         name = "Nesterov (backtracking)"
+    )
+    sol, numit = AdaProx.fixed_nesterov(
+        x0,
+        f = AdaProx.Counting(f),
+        g = g,
+        gamma = gam_init,
+        tol = tol,
+        maxit = maxit/2,
+        name = "Nesterov (fixed)"
     )
 
     sol, numit = AdaProx.adaptive_proxgrad(
         x0,
         f = AdaProx.Counting(f),
         g = g,
-        rule = AdaProx.MalitskyMishchenkoRule(gamma = 1.0),
+        rule = AdaProx.MalitskyMishchenkoRule(gamma = gam_init),
         tol = tol,
         maxit = maxit,
         name = "AdaPGM (MM)"
@@ -115,7 +126,7 @@ function run_logreg_l1_data(
         x0,
         f = AdaProx.Counting(f),
         g = g,
-        rule = AdaProx.OurRule(gamma = 1.0),
+        rule = AdaProx.OurRule(gamma = gam_init),
         tol = tol,
         maxit = maxit,
         name = "AdaPGM (Ours)"
@@ -125,6 +136,7 @@ function run_logreg_l1_data(
         x0,
         f = AdaProx.Counting(f),
         g = g,
+        gamma0 = gam_init,
         tol = tol,
         maxit = maxit,
         name = "aGRAAL"

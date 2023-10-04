@@ -90,7 +90,7 @@ function run_random_lasso(;
         gamma = gam_init,
         tol = tol,
         maxit = maxit,
-        name = "PGM (1/Lf)"
+        name = "PGM (fixed)"
     )
 
     xi_values = [1, 1.5, 2]
@@ -115,6 +115,17 @@ function run_random_lasso(;
         tol = tol,
         maxit = maxit,
         name = "Nesterov (backtracking)"
+    )
+
+
+    sol, numit = AdaProx.fixed_nesterov(
+        zeros(n),
+        f = AdaProx.Counting(f),
+        g = g,
+        gamma = gam_init,
+        tol = tol,
+        maxit = maxit,
+        name = "Nesterov (fixed)"
     )
 
     sol, numit = AdaProx.adaptive_proxgrad(
@@ -142,6 +153,7 @@ function run_random_lasso(;
         zeros(n),
         f = AdaProx.Counting(f),
         g = g,
+        gamma0 = gam_init,
         tol = tol,
         maxit = maxit,
         name = "aGRAAL"

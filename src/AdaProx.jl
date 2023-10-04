@@ -35,21 +35,21 @@ function backtrack_stepsize(gamma, f, g, x, f_x, grad_x)
         ub_z = upper_bound(x, f_x, grad_x, z, gamma)
         f_z = f(z)
     end
-    grad_z, ~ = gradient(f, z)
-    return gamma, z, f_z, grad_z
+    return gamma, z, f_z
 end
 
 function backtracking_proxgrad(x0; f, g, gamma0, xi = 1.0 ,tol = 1e-5, maxit = 100_000, name = "Backtracking PG")
     x, z, gamma = x0, x0, gamma0
     grad_x, f_x = gradient(f, x)
     for it = 1:maxit
-        gamma, z, f_z, grad_z = backtrack_stepsize(xi * gamma, f, g, x, f_x, grad_x)
+        gamma, z, f_z = backtrack_stepsize(xi * gamma, f, g, x, f_x, grad_x)
         norm_res = norm(z - x) / gamma
         @logmsg Record "" method=name it gamma norm_res objective=(nocount(f)(x) + nocount(g)(x)) grad_f_evals=grad_count(f) prox_g_evals=prox_count(g) f_evals=eval_count(f)
         if norm_res <= tol
             return z, it
         end
-        x, f_x, grad_x = z, f_z, grad_z
+        x, f_x = z, f_z
+        grad_x, _ = gradient(f, x)
     end
     return z, maxit
 end
@@ -60,7 +60,7 @@ function backtracking_nesterov(x0; f, g, gamma0, tol = 1e-5, maxit = 100_000, na
     grad_x, f_x = gradient(f, x)
     for it = 1:maxit
         z_prev = z
-        gamma, z, _, _ = backtrack_stepsize(gamma, f, g, x, f_x, grad_x)
+        gamma, z, _ = backtrack_stepsize(gamma, f, g, x, f_x, grad_x)
         norm_res = norm(z - x) / gamma
         @logmsg Record "" method=name it gamma norm_res objective=(nocount(f)(x) + nocount(g)(x)) grad_f_evals=grad_count(f) prox_g_evals=prox_count(g) f_evals=eval_count(f)
         if norm_res <= tol

@@ -76,13 +76,16 @@ end
 
 # Accelerated, backtracking proximal-gradient method, with possibly increasing stepsizes
 #
-# See Yurii Nesterov, "Gradient methods for minimizing composite functions,"
+# See "Accelerated method" from:
+# Yurii Nesterov, "Gradient methods for minimizing composite functions,"
 # Mathematical Programming, volume 140, 2013.
 # https://link.springer.com/article/10.1007/s10107-012-0629-5
 
-function backtrack_stepsize_with_extrapolation(gamma, f, g, x, A, v)
+function _step_backtracking_nesterov_2013(gamma, mu, f, g, x, A, v)
+    muA1 = mu * A + 1
     while true
-        a = (2 * gamma + sqrt((2 * gamma)^2 + 8 * gamma * A)) / 2
+        Delta = 4 * muA1^2 * gamma^2 + 8 * muA1 * gamma * A
+        a = (2 * muA1 * gamma + sqrt(Delta)) / 2
         y = (A * x + a * v) / (A + a)
         grad_y, f_y = gradient(f, y)
         w = y - gamma * grad_y
@@ -90,11 +93,11 @@ function backtrack_stepsize_with_extrapolation(gamma, f, g, x, A, v)
         ub_z = upper_bound(y, f_y, grad_y, z, gamma)
         f_z = f(z)
         if f_z <= ub_z
-            A += a
             grad_z, _ = gradient(f, z)
             subgrad_z = (w - z) / gamma
-            v = v - a * (grad_z + subgrad_z)
-            return gamma, z, f_z, g_z, A, v, y
+            v = v - a / muA1 * (grad_z + subgrad_z)
+            A += a
+            return gamma, z, f_z, g_z, y, A, v
         end
         gamma /= 2
         if gamma < 1e-12
@@ -103,22 +106,21 @@ function backtrack_stepsize_with_extrapolation(gamma, f, g, x, A, v)
     end
 end
 
-function backtracking_nesterov_2013(x0; f, g, gamma0, xi = 2.0, tol = 1e-5, maxit = 100_000, name = "Backtracking Nesterov (2012)")
-    x, z, gamma = x0, x0, gamma0
+function backtracking_nesterov_2013(x0; f, g, gamma0, mu = 0, xi = 2, tol = 1e-5, maxit = 100_000, name = "Backtracking Nesterov (2012)")
+    x, gamma = x0, gamma0
     v = x0
     A = 0
     for it in 1:maxit
-        gamma, z, f_z, g_z, A, v, y = backtrack_stepsize_with_extrapolation(
-            xi * gamma, f, g, x, A, v
+        gamma, x, f_x, g_x, y, A, v = _step_backtracking_nesterov_2013(
+            xi * gamma, mu, f, g, x, A, v
         )
-        norm_res = norm(z - y) / gamma
-        @logmsg Record "" method=name it gamma norm_res objective=(f_z + g_z) grad_f_evals=grad_count(f) prox_g_evals=prox_count(g) f_evals=eval_count(f)
+        norm_res = norm(x - y) / gamma
+        @logmsg Record "" method=name it gamma norm_res objective=(f_x + g_x) grad_f_evals=grad_count(f) prox_g_evals=prox_count(g) f_evals=eval_count(f)
         if norm_res <= tol
-            return z, it
+            return x, it
         end
-        x = z
     end
-    return z, maxit
+    return x, maxit
 end
 
 # Fixed stepsize fast proximal gradient

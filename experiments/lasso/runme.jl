@@ -117,6 +117,16 @@ function run_random_lasso(;
         name = "Nesterov (backtracking)"
     )
 
+    sol, numit = AdaProx.backtracking_nesterov_2013(
+        zeros(n),
+        f = AdaProx.Counting(f),
+        g = g,
+        gamma = gam_init,
+        tol = tol,
+        maxit = maxit,
+        name = "Nesterov (2013)"
+    )
+
     sol, numit = AdaProx.adaptive_proxgrad(
         zeros(n),
         f = AdaProx.Counting(f),

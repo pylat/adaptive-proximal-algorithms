@@ -38,10 +38,10 @@ function backtrack_stepsize(gamma, f, g, x, f_x, grad_x)
     return gamma, z, f_z, g_z
 end
 
-function backtracking_proxgrad(x0; f, g, gamma0, xi = 1.0 ,tol = 1e-5, maxit = 100_000, name = "Backtracking PG")
+function backtracking_proxgrad(x0; f, g, gamma0, xi = 1.0, tol = 1e-5, maxit = 100_000, name = "Backtracking PG")
     x, z, gamma = x0, x0, gamma0
     grad_x, f_x = gradient(f, x)
-    for it = 1:maxit
+    for it in 1:maxit
         gamma, z, f_z, g_z = backtrack_stepsize(xi * gamma, f, g, x, f_x, grad_x)
         norm_res = norm(z - x) / gamma
         @logmsg Record "" method=name it gamma norm_res objective=(f_z + g_z) grad_f_evals=grad_count(f) prox_g_evals=prox_count(g) f_evals=eval_count(f)
@@ -58,7 +58,7 @@ function backtracking_nesterov(x0; f, g, gamma0, tol = 1e-5, maxit = 100_000, na
     x, z, gamma = x0, x0, gamma0
     theta = one(gamma)
     grad_x, f_x = gradient(f, x)
-    for it = 1:maxit
+    for it in 1:maxit
         z_prev = z
         gamma, z, f_z, g_z = backtrack_stepsize(gamma, f, g, x, f_x, grad_x)
         norm_res = norm(z - x) / gamma
@@ -72,6 +72,55 @@ function backtracking_nesterov(x0; f, g, gamma0, tol = 1e-5, maxit = 100_000, na
         grad_x, f_x = gradient(f, x)
     end
     return z, maxit
+end
+
+# Accelerated, backtracking proximal-gradient method, with possibly increasing stepsizes
+#
+# See "Accelerated method" from:
+# Yurii Nesterov, "Gradient methods for minimizing composite functions,"
+# Mathematical Programming, volume 140, 2013.
+# https://link.springer.com/article/10.1007/s10107-012-0629-5
+
+function _step_backtracking_nesterov_2013(x, f, g, gamma, mu, xi, A, v)
+    gamma = gamma * xi
+    muA1 = mu * A + 1
+    while true
+        Delta = 4 * muA1^2 * gamma^2 + 8 * muA1 * gamma * A
+        a = (2 * muA1 * gamma + sqrt(Delta)) / 2
+        y = (A * x + a * v) / (A + a)
+        grad_y, f_y = gradient(f, y)
+        w = y - gamma * grad_y
+        z, g_z = prox(g, w, gamma)
+        ub_z = upper_bound(y, f_y, grad_y, z, gamma)
+        f_z = f(z)
+        if f_z <= ub_z
+            grad_z, _ = gradient(f, z)
+            subgrad_z = (w - z) / gamma
+            v = v - a / muA1 * (grad_z + subgrad_z)
+            A = A + a
+            return y, z, f_z, g_z, gamma, A, v
+        end
+        gamma = gamma / 2
+        if gamma < 1e-12
+            @error "step size became too small ($gamma)"
+        end
+    end
+end
+
+function backtracking_nesterov_2013(x; f, g, gamma, mu = 0, xi = 2, tol = 1e-5, maxit = 100_000, name = "Backtracking Nesterov (2012)")
+    A = zero(gamma)
+    v = x
+    for it in 1:maxit
+        y, x, f_x, g_x, gamma, A, v = _step_backtracking_nesterov_2013(
+            x, f, g, gamma, mu, xi, A, v
+        )
+        norm_res = norm(x - y) / gamma
+        @logmsg Record "" method=name it gamma norm_res objective=(f_x + g_x) grad_f_evals=grad_count(f) prox_g_evals=prox_count(g) f_evals=eval_count(f)
+        if norm_res <= tol
+            return x, it
+        end
+    end
+    return x, maxit
 end
 
 # Fixed stepsize fast proximal gradient
@@ -108,7 +157,7 @@ function fixed_nesterov(
     end
     @assert 0 <= theta <= 1 / sqrt(q)
     x, x_prev = x0, x0
-    for it = 1:maxit
+    for it in 1:maxit
         theta_prev = theta
         if mu == 0
             theta = (1 + sqrt(1 + 4 * theta_prev^2)) / 2
@@ -160,7 +209,7 @@ function agraal(
     gamma = gamma0
     rho = 1 / phi + 1 / phi^2
     theta = one(gamma)
-    for it = 1:maxit
+    for it in 1:maxit
         C = norm(x - x_prev)^2 / norm(grad_x - grad_x_prev)^2
         gamma_prev = gamma
         gamma = min(rho * gamma_prev, phi * theta * C / (4 * gamma_prev), gamma_max)
@@ -281,7 +330,7 @@ function adaptive_primal_dual(
     x_prev, A_x_prev, grad_x_prev = x, A_x, grad_x
     x, _ = prox(g, v, gamma)
 
-    for it = 1:maxit
+    for it in 1:maxit
         A_x = A * x
         grad_x, _ = gradient(f, x)
 
@@ -445,7 +494,7 @@ function adaptive_linesearch_primal_dual(
     x_prev, A_x_prev, grad_x_prev = x, A_x, grad_x
     x, _ = prox(g, v, gamma)
 
-    for it = 1:maxit
+    for it in 1:maxit
         A_x = A * x
         grad_x, _ = gradient(f, x)
 
@@ -540,7 +589,7 @@ function malitsky_pock(
     y_prev = y
     A_x = A * x
     At_y = A' * y
-    for it = 1:maxit
+    for it in 1:maxit
         At_y_prev = At_y 
         w = y + sigma * A_x
         y, _ = prox(h_conj, w, sigma)

@@ -101,14 +101,14 @@ function run_logreg_l1_data(
         name = "Nesterov (backtracking)"
     )
 
-    sol, numit = AdaProx.backtracking_nesterov_2012(
+    sol, numit = AdaProx.backtracking_nesterov_2013(
         zeros(n),
         f = AdaProx.Counting(f),
         g = g,
         gamma0 = 5.0,
         tol = tol,
         maxit = maxit/2,
-        name = "Nesterov (2012)"
+        name = "Nesterov (2013)"
     )
 
     sol, numit = AdaProx.adaptive_proxgrad(

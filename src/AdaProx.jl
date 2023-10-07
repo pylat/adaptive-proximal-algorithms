@@ -54,6 +54,12 @@ function backtracking_proxgrad(x0; f, g, gamma0, xi = 1.0, tol = 1e-5, maxit = 1
     return z, maxit
 end
 
+# Accelerated, backtracking proximal-gradient method, with possibly increasing stepsizes
+#
+# See Yurii Nesterov, "Gradient methods for minimizing composite functions,"
+# Mathematical Programming, volume 140, 2013.
+# https://link.springer.com/article/10.1007/s10107-012-0629-5
+
 function backtracking_nesterov(x0; f, g, gamma0, tol = 1e-5, maxit = 100_000, name = "Backtracking Nesterov")
     x, z, gamma = x0, x0, gamma0
     theta = one(gamma)

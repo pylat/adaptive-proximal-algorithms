@@ -121,7 +121,7 @@ function run_random_lasso(;
         zeros(n),
         f = AdaProx.Counting(f),
         g = g,
-        gamma0 = gam_init,
+        gamma = gam_init,
         tol = tol,
         maxit = maxit,
         name = "Nesterov (2013)"

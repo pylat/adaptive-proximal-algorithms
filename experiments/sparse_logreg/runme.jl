@@ -105,7 +105,7 @@ function run_logreg_l1_data(
         zeros(n),
         f = AdaProx.Counting(f),
         g = g,
-        gamma0 = 5.0,
+        gamma = 5.0,
         tol = tol,
         maxit = maxit/2,
         name = "Nesterov (2013)"

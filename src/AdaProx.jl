@@ -81,7 +81,8 @@ end
 # Mathematical Programming, volume 140, 2013.
 # https://link.springer.com/article/10.1007/s10107-012-0629-5
 
-function _step_backtracking_nesterov_2013(gamma, mu, f, g, x, A, v)
+function _step_backtracking_nesterov_2013(x, f, g, gamma, mu, xi, A, v)
+    gamma = gamma * xi
     muA1 = mu * A + 1
     while true
         Delta = 4 * muA1^2 * gamma^2 + 8 * muA1 * gamma * A
@@ -96,23 +97,22 @@ function _step_backtracking_nesterov_2013(gamma, mu, f, g, x, A, v)
             grad_z, _ = gradient(f, z)
             subgrad_z = (w - z) / gamma
             v = v - a / muA1 * (grad_z + subgrad_z)
-            A += a
-            return gamma, z, f_z, g_z, y, A, v
+            A = A + a
+            return y, z, f_z, g_z, gamma, A, v
         end
-        gamma /= 2
+        gamma = gamma / 2
         if gamma < 1e-12
             @error "step size became too small ($gamma)"
         end
     end
 end
 
-function backtracking_nesterov_2013(x0; f, g, gamma0, mu = 0, xi = 2, tol = 1e-5, maxit = 100_000, name = "Backtracking Nesterov (2012)")
-    x, gamma = x0, gamma0
-    v = x0
-    A = 0
+function backtracking_nesterov_2013(x; f, g, gamma, mu = 0, xi = 2, tol = 1e-5, maxit = 100_000, name = "Backtracking Nesterov (2012)")
+    A = zero(gamma)
+    v = x
     for it in 1:maxit
-        gamma, x, f_x, g_x, y, A, v = _step_backtracking_nesterov_2013(
-            xi * gamma, mu, f, g, x, A, v
+        y, x, f_x, g_x, gamma, A, v = _step_backtracking_nesterov_2013(
+            x, f, g, gamma, mu, xi, A, v
         )
         norm_res = norm(x - y) / gamma
         @logmsg Record "" method=name it gamma norm_res objective=(f_x + g_x) grad_f_evals=grad_count(f) prox_g_evals=prox_count(g) f_evals=eval_count(f)

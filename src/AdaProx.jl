@@ -2,11 +2,20 @@ module AdaProx
 
 using Logging
 using LinearAlgebra
-using ProximalCore: prox, gradient, convex_conjugate, Zero
+using ProximalCore: prox, convex_conjugate, Zero
 
 const Record = Logging.LogLevel(-1)
 
-# Utilities.
+# Gradient evaluation interface
+
+eval_with_pullback(f, _) = @error("eval_with_pullback not defined for type $(typeof(f))")
+
+function eval_with_gradient(f, x)
+    f_x, pb = eval_with_pullback(f, x)
+    return f_x, pb()
+end
+
+# Utilities
 
 include("./counting.jl")
 
@@ -25,7 +34,7 @@ upper_bound(x, f_x, grad_x, z, gamma) = f_x + real(dot(grad_x, z - x)) + 1 / (2 
 function backtrack_stepsize(gamma, f, g, x, f_x, grad_x, shrink=0.5)
     z, g_z = prox(g, x - gamma * grad_x, gamma)
     ub_z = upper_bound(x, f_x, grad_x, z, gamma)
-    f_z = f(z)
+    f_z, pb = eval_with_pullback(f, z)
     while f_z > ub_z
         gamma *= shrink
         if gamma < 1e-12
@@ -33,23 +42,23 @@ function backtrack_stepsize(gamma, f, g, x, f_x, grad_x, shrink=0.5)
         end
         z, g_z = prox(g, x - gamma * grad_x, gamma)
         ub_z = upper_bound(x, f_x, grad_x, z, gamma)
-        f_z = f(z)
+        f_z, pb = eval_with_pullback(f, z)
     end
-    return gamma, z, f_z, g_z
+    return gamma, z, f_z, g_z, pb
 end
 
 function backtracking_proxgrad(x0; f, g, gamma0, xi = 1.0, shrink = 0.5, tol = 1e-5, maxit = 100_000, name = "Backtracking PG")
     x, z, gamma = x0, x0, gamma0
-    grad_x, f_x = gradient(f, x)
+    f_x, grad_x = eval_with_gradient(f, x)
     for it = 1:maxit
-        gamma, z, f_z, g_z = backtrack_stepsize(xi * gamma, f, g, x, f_x, grad_x, shrink)
+        gamma, z, f_z, g_z, pb = backtrack_stepsize(xi * gamma, f, g, x, f_x, grad_x, shrink)
         norm_res = norm(z - x) / gamma
         @logmsg Record "" method=name it gamma norm_res objective=(f_z + g_z) grad_f_evals=grad_count(f) prox_g_evals=prox_count(g) f_evals=eval_count(f)
         if norm_res <= tol
             return z, it
         end
         x, f_x = z, f_z
-        grad_x, _ = gradient(f, x)
+        grad_x = pb()
     end
     return z, maxit
 end
@@ -57,10 +66,10 @@ end
 function backtracking_nesterov(x0; f, g, gamma0, shrink = 0.5, tol = 1e-5, maxit = 100_000, name = "Backtracking Nesterov")
     x, z, gamma = x0, x0, gamma0
     theta = one(gamma)
-    grad_x, f_x = gradient(f, x)
+    f_x, grad_x = eval_with_gradient(f, x)
     for it = 1:maxit
         z_prev = z
-        gamma, z, f_z, g_z = backtrack_stepsize(gamma, f, g, x, f_x, grad_x, shrink)
+        gamma, z, f_z, g_z, _ = backtrack_stepsize(gamma, f, g, x, f_x, grad_x, shrink)
         norm_res = norm(z - x) / gamma
         @logmsg Record "" method=name it gamma norm_res objective=(f_z + g_z) grad_f_evals=grad_count(f) prox_g_evals=prox_count(g) f_evals=eval_count(f)
         if norm_res <= tol
@@ -69,7 +78,7 @@ function backtracking_nesterov(x0; f, g, gamma0, shrink = 0.5, tol = 1e-5, maxit
         theta_prev = theta
         theta = (1 + sqrt(1 + 4 * theta_prev^2)) / 2
         x = z + (theta_prev - 1) / theta * (z - z_prev)
-        grad_x, f_x = gradient(f, x)
+        f_x, grad_x = eval_with_gradient(f, x)
     end
     return z, maxit
 end
@@ -118,11 +127,13 @@ function fixed_nesterov(
             beta = (theta_prev - 1) * (1 + gamma * mug - theta * gamma * mu) / theta / (1 - gamma * muf)
         end
         z = x + beta * (x - x_prev)
-        grad_z, _ = gradient(f, z)
+        _, grad_z = eval_with_gradient(f, z)
         x_prev = x
         x, g_x = prox(g, z - gamma * grad_z, gamma)
         norm_res = norm(x - z) / gamma
-        @logmsg Record "" method=name it gamma norm_res objective=(nocount(f)(x) + g_x) grad_f_evals=grad_count(f) prox_g_evals=prox_count(g) f_evals=eval_count(f)
+        without_counting() do
+            @logmsg Record "" method=name it gamma norm_res objective=(f(x) + g_x) grad_f_evals=grad_count(f) prox_g_evals=prox_count(g) f_evals=eval_count(f)
+        end
         if norm_res <= tol
             return x, it
         end
@@ -152,8 +163,8 @@ function agraal(
         x0 = x1 + randn(size(x1))
     end
     x, x_prev, x_bar = x1, x0, x1
-    grad_x, _ = gradient(f, x)
-    grad_x_prev, _ = gradient(f, x_prev)
+    _, grad_x = eval_with_gradient(f, x)
+    _, grad_x_prev = eval_with_gradient(f, x_prev)
     if gamma0 === nothing
         gamma0 = norm(x - x_prev) / norm(grad_x - grad_x_prev)
     end
@@ -169,11 +180,13 @@ function agraal(
         x_prev, grad_x_prev = x, grad_x
         x, g_x = prox(g, x_bar - gamma * grad_x_prev, gamma)
         norm_res = norm(x - x_prev) / gamma
-        @logmsg Record "" method=name it gamma norm_res objective=(nocount(f)(x) + g_x) grad_f_evals=grad_count(f) prox_g_evals=prox_count(g) f_evals=eval_count(f)
+        without_counting() do
+            @logmsg Record "" method=name it gamma norm_res objective=(f(x) + g_x) grad_f_evals=grad_count(f) prox_g_evals=prox_count(g) f_evals=eval_count(f)
+        end
         if norm_res <= tol
             return x, it
         end
-        grad_x, _ = gradient(f, x)
+        _, grad_x = eval_with_gradient(f, x)
     end
     return x, maxit
 end
@@ -275,7 +288,7 @@ function adaptive_primal_dual(
     h_conj = convex_conjugate(h)
 
     A_x = A * x
-    grad_x, _ = gradient(f, x)
+    _, grad_x = eval_with_gradient(f, x)
     At_y = A' * y
     v = x - gamma * (grad_x + At_y)
     x_prev, A_x_prev, grad_x_prev = x, A_x, grad_x
@@ -283,7 +296,7 @@ function adaptive_primal_dual(
 
     for it = 1:maxit
         A_x = A * x
-        grad_x, _ = gradient(f, x)
+        f_x, grad_x = eval_with_gradient(f, x)
 
         primal_res = (v - x) / gamma + grad_x + At_y
 
@@ -297,7 +310,10 @@ function adaptive_primal_dual(
         dual_res = (w - y) / sigma - A_x
         norm_res = sqrt(norm(primal_res)^2 + norm(dual_res)^2)
 
-        @logmsg Record "" method=name it gamma sigma norm_res objective=obj(f, g, h, A, x) grad_f_evals=grad_count(f) prox_g_evals=prox_count(g) prox_h_evals=prox_count(h) A_evals=mul_count(A) At_evals=amul_count(A) f_evals=eval_count(f)
+        without_counting() do
+            @logmsg Record "" method=name it gamma sigma norm_res objective=(f_x + g(x) + h(A_x)) grad_f_evals=grad_count(f) prox_g_evals=prox_count(g) prox_h_evals=prox_count(h) A_evals=mul_count(A) At_evals=amul_count(A) f_evals=eval_count(f)
+        end
+
         if norm_res <= tol
             return x, y, it
         end
@@ -368,7 +384,7 @@ function adaptive_proxgrad(x; f, g, rule, tol = 1e-5, maxit = 100_000, name = "A
 end
 
 function auto_adaptive_proxgrad(x; f, g, gamma = nothing, tol = 1e-5, maxit = 100_000, name = "AutoAdaPGM")
-    grad_x, _ = gradient(f, x)
+    _, grad_x = eval_with_gradient(f, x)
 
     if norm(grad_x) <= tol
         return x, 0
@@ -376,25 +392,25 @@ function auto_adaptive_proxgrad(x; f, g, gamma = nothing, tol = 1e-5, maxit = 10
 
     if gamma === nothing 
         xeps = prox(x .- 0.1 * grad_x, 0.1) # proxgrad
-        grad_xeps, _ = gradient(f, xeps)
+        _, grad_xeps = eval_with_gradient(f, xeps)
         L = dot(grad_x - grad_xeps, x - xeps) / norm(x - xeps)^2
         gamma = iszero(L) ? 1.0 : 1 / L  
-    end 
+    end
 
     @assert gamma > 0
-    
+
     x_prev, grad_x_prev, gamma_prev = x, grad_x, gamma
     x, _ = prox(g, x - gamma * grad_x, gamma)
-    grad_x, _ = gradient(f, x)
+    _, grad_x = eval_with_gradient(f, x)
     L = dot(grad_x - grad_x_prev, x - x_prev) / norm(x - x_prev)^2
     gamma = iszero(L) ? sqrt(2) * gamma : 1 / L
 
     if gamma_prev / gamma > 1e5  # if the inital guess was too large
         x, _ = prox(g, x_prev - gamma * grad_x_prev, gamma)
-        grad_x, _ = gradient(f, x)
+        _, grad_x = eval_with_gradient(f, x)
         L = dot(grad_x - grad_x_prev, x - x_prev) / norm(x - x_prev)^2
         gamma = iszero(L) ? sqrt(2) * gamma : 1 / L
-    end     
+    end
 
     rule = OurRule(; gamma, t=1, norm_A=0, delta=0, Theta=1.2)
 
@@ -439,7 +455,7 @@ function adaptive_linesearch_primal_dual(
     h_conj = convex_conjugate(h)
 
     A_x = A * x
-    grad_x, _ = gradient(f, x)
+    _, grad_x = eval_with_gradient(f, x)
     At_y = A' * y
     v = x - gamma * (grad_x + At_y)
     x_prev, A_x_prev, grad_x_prev = x, A_x, grad_x
@@ -447,7 +463,7 @@ function adaptive_linesearch_primal_dual(
 
     for it = 1:maxit
         A_x = A * x
-        grad_x, _ = gradient(f, x)
+        f_x, grad_x = eval_with_gradient(f, x)
 
         primal_res = (v - x) / gamma + grad_x + At_y
 
@@ -482,7 +498,9 @@ function adaptive_linesearch_primal_dual(
         dual_res = (w - y) / sigma - A_x
         norm_res = sqrt(norm(primal_res)^2 + norm(dual_res)^2)
 
-        @logmsg Record "" method=name it gamma sigma norm_res objective=obj(f, g, h, A, x) grad_f_evals=grad_count(f) prox_g_evals=prox_count(g) prox_h_evals=prox_count(h) A_evals=mul_count(A) At_evals=amul_count(A) f_evals=eval_count(f)
+        without_counting() do
+            @logmsg Record "" method=name it gamma sigma norm_res objective=(f_x + g(x) + h(A_x)) grad_f_evals=grad_count(f) prox_g_evals=prox_count(g) prox_h_evals=prox_count(h) A_evals=mul_count(A) At_evals=amul_count(A) f_evals=eval_count(f)
+        end
         if norm_res <= tol
             return x, y, it
         end
@@ -492,9 +510,8 @@ function adaptive_linesearch_primal_dual(
         x, _ = prox(g, v, gamma)
     end
     return x, y, maxit
-end      
-  
-  
+end
+
 # Algorithm 4 of ``A first-order primal-dual algorithm with linesearch''
 # (applied to the dual for consistency)
 
@@ -505,7 +522,8 @@ function backtrack_stepsize_MP(sigma, sigma_prev, t, x_prev, y, y_prev, grad_x_p
     v = x_prev - gamma * (At_ybar + grad_x_prev)
     x, _ = prox(g, v, gamma)
     A_x = A * x
-    lhs = gamma * sigma * norm(A_x - A_x_prev)^2 + 2 * gamma * (f(x) - f_x_prev - dot(grad_x_prev, x - x_prev))
+    f_x, pb = eval_with_pullback(f, x)
+    lhs = gamma * sigma * norm(A_x - A_x_prev)^2 + 2 * gamma * (f_x - f_x_prev - dot(grad_x_prev, x - x_prev))
     while lhs > 0.95 * norm(x - x_prev)^2
         sigma /= 2
         if sigma < 1e-12
@@ -517,9 +535,10 @@ function backtrack_stepsize_MP(sigma, sigma_prev, t, x_prev, y, y_prev, grad_x_p
         v = x_prev - gamma * (At_ybar + grad_x_prev)
         x, _ = prox(g, v, gamma)
         A_x = A * x
-        lhs = gamma * sigma * norm(A_x - A_x_prev)^2 + 2 * gamma * (f(x) - f_x_prev - dot(grad_x_prev, x - x_prev))
+        f_x, pb = eval_with_pullback(f, x)
+        lhs = gamma * sigma * norm(A_x - A_x_prev)^2 + 2 * gamma * (f_x - f_x_prev - dot(grad_x_prev, x - x_prev))
     end
-    return sigma, gamma, x, v, A_x
+    return sigma, gamma, x, v, A_x, f_x, pb
 end
 
 function malitsky_pock(
@@ -549,11 +568,11 @@ function malitsky_pock(
         sigma_prev = sigma
         sigma = sigma * sqrt(1 + theta)
 
-        grad_x_prev, f_x_prev = gradient(f, x)
+        f_x_prev, grad_x_prev = eval_with_gradient(f, x)
         x_prev, A_x_prev = x, A_x
-        sigma, gamma, x, v, A_x =
+        sigma, gamma, x, v, A_x, f_x, pb =
             backtrack_stepsize_MP(sigma, sigma_prev, t, x_prev, y, y_prev, grad_x_prev, A_x_prev, At_y, At_y_prev, f, g, A, f_x_prev)
-        grad_x, f_x = gradient(f, x)
+        grad_x = pb()
 
         y_prev = y
 
@@ -561,7 +580,10 @@ function malitsky_pock(
         dual_res = (w - y) / sigma_prev - A_x
         norm_res = sqrt(norm(primal_res)^2 + norm(dual_res)^2)
 
-        @logmsg Record "" method=name it gamma sigma norm_res objective=obj(f, g, h, A, x) grad_f_evals=grad_count(f) prox_g_evals=prox_count(g) prox_h_evals=prox_count(h) A_evals=mul_count(A) At_evals=amul_count(A) f_evals=eval_count(f)
+        without_counting() do
+            @logmsg Record "" method=name it gamma sigma norm_res objective=(f_x + g(x) + h(A_x)) grad_f_evals=grad_count(f) prox_g_evals=prox_count(g) prox_h_evals=prox_count(h) A_evals=mul_count(A) At_evals=amul_count(A) f_evals=eval_count(f)
+        end
+
         if norm_res <= tol
             return x, y, it
         end

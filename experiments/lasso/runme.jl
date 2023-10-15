@@ -18,13 +18,13 @@ struct LinearLeastSquares{TA,Tb}
     b::Tb
 end
 
-(f::LinearLeastSquares)(w) = 0.5 * norm(f.A * w - f.b)^2
-
-function ProximalCore.gradient!(grad, f::LinearLeastSquares, w)
+function AdaProx.eval_with_pullback(f::LinearLeastSquares, w)
     res = f.A * w - f.b
-    grad .= f.A' * res
-    return 0.5 * norm(res)^2
+    linear_least_squares_pullback() = f.A' * res
+    return 0.5 * norm(res)^2, linear_least_squares_pullback
 end
+
+(f::LinearLeastSquares)(w) = AdaProx.eval_with_pullback(f, w)[1]
 
 function run_random_lasso(;
     m = 400,
@@ -176,7 +176,9 @@ function plot_convergence(path)
             continue
         end
         plot!(
-            2*gb[k][!, :grad_f_evals] + gb[k][!, :f_evals],
+            # each evaluation of f is one mul with A
+            # each gradient of f is one additional mul with A'
+            gb[k][!, :grad_f_evals] + gb[k][!, :f_evals],
             max.(1e-14, gb[k][!, :objective] .- optimal_value),
             yaxis = :log,
             label = k.method,

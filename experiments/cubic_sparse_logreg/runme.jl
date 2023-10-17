@@ -66,61 +66,73 @@ function run_cubic_logreg_data(
     f = Cubic(Q, q, lam)
     g = ProximalCore.Zero()
 
+
+    x0 = zeros(n)
+    x_pert = x0 + randn(size(x0))
+
+    grad_x, _ = ProximalCore.gradient(f, x0)
+    grad_x_pert, _ = ProximalCore.gradient(f, x_pert)
+    gam_init = norm(x0 - x_pert)^2 / dot(grad_x - grad_x_pert, x0 - x_pert) 
+
     # run algorithm with 1/10 the tolerance to get "accurate" solution
     sol, numit = AdaProx.adaptive_proxgrad(
-        zeros(n),
+        x0,
         f = f,
         g = g,
-        rule = AdaProx.OurRule(gamma = 1.0),
+        rule = AdaProx.OurRule(gamma = gam_init),
         tol = tol / 10,
         maxit = maxit * 10,
         name = nothing,
     )
-
-    sol, numit = AdaProx.backtracking_proxgrad(
-        zeros(n),
-        f = AdaProx.Counting(f),
-        g = g,
-        gamma0 = 1.0,
-        tol = tol,
-        maxit = maxit,
-        name = "PGM (backtracking)",
-    )
+    xi_values = [1, 1.5, 2]
+    for xi = xi_values
+        sol, numit = AdaProx.backtracking_proxgrad(
+            x0,
+            f = AdaProx.Counting(f),
+            g = g,
+            gamma0 = gam_init,
+            xi = xi,
+            tol = tol,
+            maxit = maxit,
+            name = "PGM (backtracking)-(xi=$(xi))",
+        )
+    end
 
     sol, numit = AdaProx.backtracking_nesterov(
-        zeros(n),
+        x0,
         f = AdaProx.Counting(f),
         g = g,
-        gamma0 = 1.0,
+        gamma0 = gam_init,
         tol = tol,
         maxit = maxit,
         name = "Nesterov (backtracking)",
     )
 
     sol, numit = AdaProx.adaptive_proxgrad(
-        zeros(n),
+        x0,
         f = AdaProx.Counting(f),
         g = g,
-        rule = AdaProx.MalitskyMishchenkoRule(gamma = 1.0),
+        rule = AdaProx.MalitskyMishchenkoRule(gamma = gam_init),
         tol = tol,
         maxit = maxit,
         name = "AdaPGM (MM)",
     )
 
     sol, numit = AdaProx.adaptive_proxgrad(
-        zeros(n),
+        x0,
         f = AdaProx.Counting(f),
         g = g,
-        rule = AdaProx.OurRule(gamma = 1.0),
+        rule = AdaProx.OurRule(gamma = gam_init),
         tol = tol,
         maxit = maxit,
         name = "AdaPGM (Ours)",
     )
 
     sol, numit = AdaProx.agraal(
-        zeros(n),
+        x0,
         f = AdaProx.Counting(f),
         g = g,
+        gamma0 = gam_init,
         tol = tol,
         maxit = maxit,
         name = "aGRAAL"

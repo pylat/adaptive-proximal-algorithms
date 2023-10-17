@@ -22,47 +22,47 @@ upper_bound(x, f_x, grad_x, z, gamma) = f_x + real(dot(grad_x, z - x)) + 1 / (2 
 # MOS-SIAM Series on Optimization, SIAM, 2017.
 # https://my.siam.org/Store/Product/viewproduct/?ProductId=29044686
 
-function backtrack_stepsize(gamma, f, g, x, f_x, grad_x)
-    z, _ = prox(g, x - gamma * grad_x, gamma)
+function backtrack_stepsize(gamma, f, g, x, f_x, grad_x, shrink=0.5)
+    z, g_z = prox(g, x - gamma * grad_x, gamma)
     ub_z = upper_bound(x, f_x, grad_x, z, gamma)
     f_z = f(z)
     while f_z > ub_z
-        gamma /= 2
+        gamma *= shrink
         if gamma < 1e-12
             @error "step size became too small ($gamma)"
         end
-        z, _ = prox(g, x - gamma * grad_x, gamma)
+        z, g_z = prox(g, x - gamma * grad_x, gamma)
         ub_z = upper_bound(x, f_x, grad_x, z, gamma)
         f_z = f(z)
     end
-    grad_z, ~ = gradient(f, z)
-    return gamma, z, f_z, grad_z
+    return gamma, z, f_z, g_z
 end
 
-function backtracking_proxgrad(x0; f, g, gamma0, xi = 1.0 ,tol = 1e-5, maxit = 100_000, name = "Backtracking PG")
+function backtracking_proxgrad(x0; f, g, gamma0, xi = 1.0, shrink = 0.5, tol = 1e-5, maxit = 100_000, name = "Backtracking PG")
     x, z, gamma = x0, x0, gamma0
     grad_x, f_x = gradient(f, x)
     for it = 1:maxit
-        gamma, z, f_z, grad_z = backtrack_stepsize(xi * gamma, f, g, x, f_x, grad_x)
+        gamma, z, f_z, g_z = backtrack_stepsize(xi * gamma, f, g, x, f_x, grad_x, shrink)
         norm_res = norm(z - x) / gamma
-        @logmsg Record "" method=name it gamma norm_res objective=(nocount(f)(x) + nocount(g)(x)) grad_f_evals=grad_count(f) prox_g_evals=prox_count(g) f_evals=eval_count(f)
+        @logmsg Record "" method=name it gamma norm_res objective=(f_z + g_z) grad_f_evals=grad_count(f) prox_g_evals=prox_count(g) f_evals=eval_count(f)
         if norm_res <= tol
             return z, it
         end
-        x, f_x, grad_x = z, f_z, grad_z
+        x, f_x = z, f_z
+        grad_x, _ = gradient(f, x)
     end
     return z, maxit
 end
 
-function backtracking_nesterov(x0; f, g, gamma0, tol = 1e-5, maxit = 100_000, name = "Backtracking Nesterov")
+function backtracking_nesterov(x0; f, g, gamma0, shrink = 0.5, tol = 1e-5, maxit = 100_000, name = "Backtracking Nesterov")
     x, z, gamma = x0, x0, gamma0
     theta = one(gamma)
     grad_x, f_x = gradient(f, x)
     for it = 1:maxit
         z_prev = z
-        gamma, z, _, _ = backtrack_stepsize(gamma, f, g, x, f_x, grad_x)
+        gamma, z, f_z, g_z = backtrack_stepsize(gamma, f, g, x, f_x, grad_x, shrink)
         norm_res = norm(z - x) / gamma
-        @logmsg Record "" method=name it gamma norm_res objective=(nocount(f)(x) + nocount(g)(x)) grad_f_evals=grad_count(f) prox_g_evals=prox_count(g) f_evals=eval_count(f)
+        @logmsg Record "" method=name it gamma norm_res objective=(f_z + g_z) grad_f_evals=grad_count(f) prox_g_evals=prox_count(g) f_evals=eval_count(f)
         if norm_res <= tol
             return z, it
         end
@@ -120,9 +120,9 @@ function fixed_nesterov(
         z = x + beta * (x - x_prev)
         grad_z, _ = gradient(f, z)
         x_prev = x
-        x, _ = prox(g, z - gamma * grad_z, gamma)
+        x, g_x = prox(g, z - gamma * grad_z, gamma)
         norm_res = norm(x - z) / gamma
-        @logmsg Record "" method=name it gamma norm_res objective=(nocount(f)(x) + nocount(g)(x)) grad_f_evals=grad_count(f) prox_g_evals=prox_count(g) f_evals=eval_count(f)
+        @logmsg Record "" method=name it gamma norm_res objective=(nocount(f)(x) + g_x) grad_f_evals=grad_count(f) prox_g_evals=prox_count(g) f_evals=eval_count(f)
         if norm_res <= tol
             return x, it
         end
@@ -167,9 +167,9 @@ function agraal(
         theta = phi * gamma / gamma_prev
         x_bar = ((phi - 1) * x + x_bar) / phi
         x_prev, grad_x_prev = x, grad_x
-        x, _ = prox(g, x_bar - gamma * grad_x_prev, gamma)
+        x, g_x = prox(g, x_bar - gamma * grad_x_prev, gamma)
         norm_res = norm(x - x_prev) / gamma
-        @logmsg Record "" method=name it gamma norm_res objective=(nocount(f)(x) + nocount(g)(x)) grad_f_evals=grad_count(f) prox_g_evals=prox_count(g) f_evals=eval_count(f)
+        @logmsg Record "" method=name it gamma norm_res objective=(nocount(f)(x) + g_x) grad_f_evals=grad_count(f) prox_g_evals=prox_count(g) f_evals=eval_count(f)
         if norm_res <= tol
             return x, it
         end

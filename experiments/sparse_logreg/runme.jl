@@ -20,20 +20,23 @@ struct LogisticLoss{TX,Ty}
     y::Ty
 end
 
-function (f::LogisticLoss)(w)
-    z = f.X * w[1:end-1] .+ w[end]
-    return -mean((f.y .- 1) .* z .- log.(1 .+ exp.(-z)))
+function AdaProx.eval_with_pullback(f::LogisticLoss, w)
+    logits = f.X * w[1:end-1] .+ w[end]
+    u = 1 .+ exp.(-logits)
+
+    function logistic_loss_pullback()
+        probs = 1 ./ u
+        N = size(f.y, 1)
+        grad = zero(w)
+        grad[1:end-1] .= f.X' * (probs - f.y) ./ N
+        grad[end] = mean(probs - f.y)
+        return grad
+    end
+
+    return -mean((f.y .- 1) .* logits .- log.(u)), logistic_loss_pullback
 end
 
-function ProximalCore.gradient!(grad, f::LogisticLoss, w)
-    z = f.X * w[1:end-1] .+ w[end]
-    w = (1 .+ exp.(-z))
-    probs = 1 ./ w
-    N = size(f.y, 1)
-    grad[1:end-1] .= f.X' * (probs - f.y) ./ N
-    grad[end] = mean(probs - f.y)
-    return -mean((f.y .- 1) .* z .- log.(w))
-end
+(f::LogisticLoss)(w) = AdaProx.eval_with_pullback(f, w)[1]
 
 function run_logreg_l1_data(
     filename,
@@ -159,7 +162,9 @@ function plot_convergence(path)
             continue
         end
         plot!(
-            2*gb[k][!, :grad_f_evals] + gb[k][!, :f_evals],
+            # each evaluation of f is one mul with A
+            # each gradient of f is one additional mul with A'
+            gb[k][!, :grad_f_evals] + gb[k][!, :f_evals],
             max.(1e-14, gb[k][!, :objective] .- optimal_value),
             yaxis = :log,
             label = k.method,

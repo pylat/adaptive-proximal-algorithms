@@ -1,11 +1,23 @@
 using LinearAlgebra
 using ProximalCore
 
+_counting_enabled = true
+
+is_counting_enabled() = _counting_enabled
+
+function without_counting(f)
+    global _counting_enabled
+    _counting_enabled = false
+    ret = f()
+    _counting_enabled = true
+    return ret
+end
+
 mutable struct Counting{F,I}
     f::F
     eval_count::I
-    prox_count::I
     grad_count::I
+    prox_count::I
     mul_count::I
     amul_count::I
 end
@@ -19,35 +31,53 @@ Counting(f::F) where {F} = begin
     Counting{F,typeof(count)}(f, count, count, count, count, count)
 end
 
-function (g::Counting)(x)
-    g.eval_count += 1
-    g.f(x)
-end
+(f::Counting)(args...) = f.f(args...)
 
-function ProximalCore.gradient!(grad, g::Counting, x)
-    g.grad_count += 1
-    ProximalCore.gradient!(grad, g.f, x)
+function eval_with_pullback(g::Counting, x)
+    if is_counting_enabled()
+        g.eval_count += 1
+    end
+
+    f_x, pb = eval_with_pullback(g.f, x)
+
+    function counting_pullback()
+        if is_counting_enabled()
+            g.grad_count += 1
+        end
+        return pb()
+    end
+
+    return f_x, counting_pullback
 end
 
 function ProximalCore.prox!(y, g::Counting, x, gamma)
-    g.prox_count += 1
-    ProximalCore.prox!(y, g.f, x, gamma)
+    if is_counting_enabled()
+        g.prox_count += 1
+    end
+
+    return ProximalCore.prox!(y, g.f, x, gamma)
 end
 
-struct AdjointOperator{O}
+struct AdjointCounting{O}
     op::O
 end
 
 LinearAlgebra.norm(C::Counting) = norm(C.f)
-LinearAlgebra.adjoint(C::Counting) = AdjointOperator(C)
+LinearAlgebra.adjoint(C::Counting) = AdjointCounting(C)
 
 function Base.:*(C::Counting, x)
-    C.mul_count += 1
+    if is_counting_enabled()
+        C.mul_count += 1
+    end
+
     return C.f * x
 end
 
-function Base.:*(A::AdjointOperator{<:Counting}, x)
-    A.op.amul_count += 1
+function Base.:*(A::AdjointCounting{<:Counting}, x)
+    if is_counting_enabled()
+        A.op.amul_count += 1
+    end
+
     return A.op.f' * x
 end
 
@@ -63,19 +93,5 @@ mul_count(c::Counting) = c.mul_count
 amul_count(_) = nothing
 amul_count(c::Counting) = c.amul_count
 
-nocount(obj) = obj
-nocount(c::Counting) = c.f
-
 eval_count(_) = nothing
 eval_count(c::Counting) = c.eval_count
-
-function obj(f, g, h, A, x) 
-    y = try 
-        nocount(f)(x) +
-        nocount(g)(x) + 
-        nocount(h)(nocount(A) * x)
-    catch e 
-        nocount(f)(x)
-    end 
-    return y
-end

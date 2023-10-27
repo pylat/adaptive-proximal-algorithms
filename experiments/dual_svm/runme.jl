@@ -11,8 +11,8 @@ using AdaProx
 using Random
 using Plots
 using LaTeXStrings
-using ProximalCore
-using ProximalOperators: IndBox, IndZero
+using ProximalCore: IndZero
+using ProximalOperators: IndBox
 
 pgfplotsx()
 
@@ -21,15 +21,10 @@ struct Quadratic{TQ,Tq}
     q::Tq
 end
 
-function (f::Quadratic)(x)
+function AdaProx.eval_with_pullback(f::Quadratic, x)
     temp = f.Q * x
-    return 0.5 * dot(x, temp) + dot(x, f.q)
-end
-
-function ProximalCore.gradient!(grad, f::Quadratic, x)
-    temp = f.Q * x
-    grad .= temp + f.q
-    return 0.5 * dot(x, temp) + dot(x, f.q)
+    quadratic_pullback() = temp + f.q
+    return 0.5 * dot(x, temp) + dot(x, f.q), quadratic_pullback
 end
 
 function run_dsvm(
@@ -56,7 +51,7 @@ function run_dsvm(
     f = Quadratic(Q, q)
     g = IndBox(0.0, C)
     h = IndZero()
-    A = y'
+    A = Matrix(y')
 
     Lf = norm(Q)
     x0 = zeros(N)
@@ -117,7 +112,7 @@ function plot_residual(path)
     names_to_plot = []
     for name in ["Condat-Vu", "Malitsky-Pock", "AdaPDM"]
         matching_names = [k for k in keys(gb) if startswith(k.method, name)]
-        push!(names_to_plot, find_best(gb, matching_names, :norm_res, 1e-5, :grad_f_evals))
+        push!(names_to_plot, find_best(gb, matching_names, :norm_res, 1e-5, :f_evals))
     end
 
     fig = plot(
@@ -131,7 +126,7 @@ function plot_residual(path)
             continue
         end
         plot!(
-            gb[k][!, :grad_f_evals],
+            gb[k][!, :f_evals],
             gb[k][!, :norm_res],
             yaxis = :log,
             label = k.method,
@@ -143,7 +138,7 @@ end
 
 
 function main(;maxit = 10_000)
-    keys_to_log = [:method, :it, :grad_f_evals, :norm_res]
+    keys_to_log = [:method, :it, :f_evals, :norm_res]
 
     for C  in [0.1, 1]
         path = joinpath(@__DIR__, "svmguide3_C_$(C).jsonl")

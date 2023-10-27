@@ -16,27 +16,28 @@ struct WorstQuadratic{S,T}
     L::T
 end
 
-function (f::WorstQuadratic)(x)
+function AdaProx.eval_with_pullback(f::WorstQuadratic, x)
     s = x[1]^2 + x[f.k]^2
+
     for i in 1:(f.k-1)
         s += (x[i] - x[i+1])^2
     end
-    return (f.L / 4) * (s / 2 - x[1])
+
+    function worst_quadratic_pullback()
+        grad = zero(x)
+        grad[1] = (f.L / 4) * (2 * x[1] - x[2] - 1)
+        for i in 2:(f.k-1)
+            grad[i] = (f.L / 4) * (2 * x[i] - x[i-1] - x[i+1])
+        end
+        grad[f.k] = (f.L / 4) * (2 * x[f.k] - x[f.k-1])
+        grad[(f.k+1):end] .= 0
+        return grad
+    end
+
+    return (f.L / 4) * (s / 2 - x[1]), worst_quadratic_pullback
 end
 
-function ProximalCore.gradient!(grad, f::WorstQuadratic, x)
-    grad[1] = (f.L / 4) * (2 * x[1] - x[2] - 1)
-    for i in 2:(f.k-1)
-        grad[i] = (f.L / 4) * (2 * x[i] - x[i-1] - x[i+1])
-    end
-    grad[f.k] = (f.L / 4) * (2 * x[f.k] - x[f.k-1])
-    grad[(f.k+1):end] .= 0
-    # since f is quadratic, f(x) = 1/2 <x, Q x> + <q, x>
-    # meaning \nabla f(x) = Q x + q
-    # and f(x) = (1/2) <\nabla f(x), x> + (1/2) <q, x>
-    # since q = -(L/4) e_1, we obtain the following
-    return dot(grad, x) / 2 - (f.L / 8) * x[1]
-end
+(f::WorstQuadratic)(x) = AdaProx.eval_with_pullback(f, x)[1]
 
 function run_nesterov_worst_case()
     k = 100

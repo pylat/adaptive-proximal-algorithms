@@ -23,12 +23,13 @@ struct Cubic{TQ,Tq,R}
     c::R
 end
 
-(f::Cubic)(x) = dot(x, f.Q * x) / 2 + dot(x, f.q) + norm(x)^3 * f.c / 6
-
-function ProximalCore.gradient!(grad, f::Cubic, x)
-    grad .= f.Q * x + f.q + (norm(x) * f.c / 2) * x
-    return (dot(x, grad) + dot(f.q, x)) / 2 - norm(x)^3 * f.c / 12
+function AdaProx.eval_with_pullback(f::Cubic, x)
+    grad = f.Q * x + f.q + (norm(x) * f.c / 2) * x
+    cubic_pullback() = grad
+    return (dot(x, grad) + dot(f.q, x)) / 2 - norm(x)^3 * f.c / 12, cubic_pullback
 end
+
+(f::Cubic)(x) = AdaProx.eval_with_pullback(f, x)[1]
 
 function logistic_loss_grad_Hessian(X, y, w)
     probs = sigm.(X * w[1:end-1] .+ w[end])
@@ -155,7 +156,8 @@ function plot_convergence(path)
             continue
         end
         plot!(
-            gb[k][!, :grad_f_evals] + gb[k][!, :f_evals],
+            # each evaluation of f is one mul with Q
+            gb[k][!, :f_evals],
             max.(1e-14, gb[k][!, :objective] .- optimal_value),
             yaxis = :log,
             label = k.method,

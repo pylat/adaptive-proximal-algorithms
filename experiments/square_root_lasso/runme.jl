@@ -15,6 +15,11 @@ using AdaProx
 
 pgfplotsx()
 
+function AdaProx.eval_with_pullback(f::Zero, x)
+    zero_pullback() = zero(x)
+    return f(x), zero_pullback
+end
+
 function run_square_root_lasso(
     filename,
     ::Type{T} = Float64;

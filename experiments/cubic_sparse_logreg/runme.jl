@@ -71,8 +71,8 @@ function run_cubic_logreg_data(
     x0 = zeros(n)
     x_pert = x0 + randn(size(x0))
 
-    grad_x, _ = ProximalCore.gradient(f, x0)
-    grad_x_pert, _ = ProximalCore.gradient(f, x_pert)
+    _, grad_x = AdaProx.eval_with_gradient(f, x0)
+    _, grad_x_pert = AdaProx.eval_with_gradient(f, x_pert)
     gam_init = norm(x0 - x_pert)^2 / dot(grad_x - grad_x_pert, x0 - x_pert) 
 
     # run algorithm with 1/10 the tolerance to get "accurate" solution

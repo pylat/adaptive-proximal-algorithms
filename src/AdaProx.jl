@@ -272,6 +272,43 @@ function stepsize(rule::OurRule, (gamma1, gamma0), x1, grad_x1, x0, grad_x0)
     return (gamma, sigma), (gamma, gamma1)
 end
 
+
+
+struct OurRulePlus{R}
+    gamma::R
+    xi::R
+    nu::R
+    r::R
+end
+
+function OurRulePlus(; gamma = 0, nu = 1, xi = 1, r = 1/2)
+    _gamma = if gamma > 0
+        gamma
+    else
+        error("you must provide gamma > 0")
+    end
+    R = typeof(_gamma)
+    return OurRulePlus{R}(_gamma, R(xi), R(nu), R(r))
+end
+
+function stepsize(rule::OurRulePlus)
+    gamma = rule.gamma
+    return (gamma, gamma), (gamma, gamma)
+end
+
+function stepsize(rule::OurRulePlus, (gamma1, gamma0), x1, grad_x1, x0, grad_x0)
+    C = norm(grad_x1 - grad_x0)^2 / dot(grad_x1 - grad_x0, x1 - x0) |> nan_to_zero
+    L = dot(grad_x1 - grad_x0, x1 - x0) / norm(x1 - x0)^2 |> nan_to_zero
+    D = 1- 2*rule.r + gamma1 * L * (gamma1 * C + 2*(rule.r-1) ) |> nan_to_zero
+    gamma = gamma1 * min(
+        sqrt( 1/(rule.r*(rule.nu + rule.xi)) + gamma1 / gamma0),
+        sqrt( (rule.nu*(1+rule.xi) -1)/(rule.nu*(rule.nu+rule.xi)) ) / sqrt(max(D,0))
+    )
+    return (gamma, gamma), (gamma, gamma1)
+end
+
+
+
 function adaptive_primal_dual(
     x,
     y;
